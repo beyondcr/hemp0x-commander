@@ -14,13 +14,16 @@
   <br />
 
   <a href="https://hemp0x.com">
-    <img src="https://img.shields.io/badge/WEBSITE-hemp0x.com-success?style=for-the-badge&logo=globe&logoColor=black&labelColor=black" alt="Website" />
+    <img src="https://img.shields.io/badge/WEBSITE-hemp0x.com-333333?style=for-the-badge&logo=globe&logoColor=white&labelColor=101010" alt="Website" />
   </a>
   <a href="https://github.com/beyondcr/hemp0x-commander/releases">
-    <img src="https://img.shields.io/badge/DOWNLOAD-v1.2-lightgrey?style=for-the-badge&logo=windows&logoColor=black&labelColor=black" alt="Download" />
+    <img src="https://img.shields.io/badge/DOWNLOAD-v1.2-333333?style=for-the-badge&logo=windows&logoColor=white&labelColor=101010" alt="Download" />
   </a>
-  <a href="https://discord.gg/hemp0x">
-    <img src="https://img.shields.io/badge/DISCORD-JOIN_DEVS-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=black" alt="Discord" />
+  <a href="https://discord.gg/FMEKJUwcsu">
+    <img src="https://img.shields.io/badge/DISCORD-JOIN_US-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=101010" alt="Discord" />
+  </a>
+  <a href="docs/BUILDING.md">
+    <img src="https://img.shields.io/badge/DOCS-BUILD_GUIDES-333333?style=for-the-badge&logo=rust&logoColor=white&labelColor=101010" alt="Build Guides" />
   </a>
 </div>
 
@@ -88,7 +91,7 @@ This application is merely a **Visual Shell** interacting with the core `hemp0xd
 
 **Found a glitch? Want a feature?**
 Don't keep it to yourself.
-*   **Report it** on the [Hemp0x Discord](https://discord.gg/hemp0x).
+*   **Report it** on the [Hemp0x Discord](https://discord.gg/FMEKJUwcsu).
 *   **Fix it** and submit a PR.
 *   **Break it** and tell us how you did it.
 
