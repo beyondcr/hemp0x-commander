@@ -2,7 +2,7 @@
 
 <div align="center">
   <a href="https://hemp0x.com">
-    <img src="src/assets/hemp0xgit.jpg" alt="Hemp0x Logo" width="160" />
+    <img src="src/assets/hemp0xgit.png" alt="Hemp0x Logo" width="160" />
   </a>
 
   <h3>Interface for the Hemp0x Blockchain</h3>
