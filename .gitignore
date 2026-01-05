@@ -1,0 +1,37 @@
+# Node / Frontend
+node_modules
+dist
+.svelte-kit
+build
+.env
+.env.*
+!.env.example
+
+# Rust / Tauri
+src-tauri/target
+**/target/
+Cargo.lock
+**/*.rs.bk
+src-tauri/*.exe
+src-tauri/hemp0xd
+src-tauri/hemp0x-cli
+
+# OS Specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.iml
+
+# Hemp0x Data & Logs (Safety)
+wallet.dat
+hemp.conf
+debug.log
+db.log
+peers.dat
+banlist.dat
+*.pid

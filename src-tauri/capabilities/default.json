@@ -1,0 +1,34 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "shell:default",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "xdg-open",
+          "cmd": "xdg-open",
+          "args": true
+        },
+        {
+          "name": "dolphin",
+          "cmd": "dolphin",
+          "args": true
+        },
+        {
+          "name": "nautilus",
+          "cmd": "nautilus",
+          "args": true
+        }
+      ]
+    }
+  ]
+}

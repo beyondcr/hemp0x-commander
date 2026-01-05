@@ -1,0 +1,444 @@
+:root {
+  /* --- PALETTE: Radioactive Emerald (Refined) --- */
+  --bg-void: #000000;
+  /* Pure Void */
+  --bg-panel: #050505;
+
+  --color-primary: #00ff41;
+  /* The Neon Green */
+  --color-primary-dim: #008f11;
+  /* Matrix Green */
+  --color-highlight: #e0ffee;
+  /* Slightly warmer bright text */
+  --color-muted: rgba(255, 255, 255, 0.55);
+  /* Dimmer muted for contrast */
+
+  --color-danger: #ff3333;
+  --color-process: #00ccff;
+
+  /* --- GLASS EFFEX (Deep OLED) --- */
+  --glass-surface: rgba(5, 12, 8, 0.85);
+  /* Darker, more opaque */
+  --glass-border: 1px solid rgba(0, 255, 65, 0.18);
+  /* Subtle green tint */
+  --glass-highlight: 1px solid rgba(255, 255, 255, 0.12);
+  /* Top edge light */
+  --glass-shadow: 0 18px 40px rgba(0, 0, 0, 0.85);
+  /* Heavier shadow */
+  --glass-blur: blur(20px);
+  /* Creamy blur */
+
+  /* --- TYPOGRAPHY --- */
+  --font-ui: 'Segoe UI', Inter, system-ui, sans-serif;
+  --font-mono: 'Consolas', 'Fira Code', monospace;
+
+  /* --- SPACING --- */
+  --radius-lg: 20px;
+  /* More rounded/modern */
+  --radius-sm: 8px;
+  --space-md: 1rem;
+}
+
+/* Reset & Base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-void);
+  color: var(--color-highlight);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+  /* THE "NO SCROLL" RULE */
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+  /* App feel */
+}
+
+/* --- UTILITIES --- */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.glow-text {
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4);
+}
+
+/* Scrollbar Styling (Global & Custom) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+  box-shadow: 0 0 10px var(--color-primary);
+}
+
+/* BUTTONS */
+button {
+  background: rgba(255, 255, 255, 0.03);
+  border: var(--glass-border);
+  color: var(--color-primary);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0.65rem 1.2rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  backdrop-filter: blur(4px);
+}
+
+button:hover {
+  background: rgba(0, 255, 65, 0.1);
+  border-color: rgba(0, 255, 65, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* TABS */
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-muted);
+  padding: 0.85rem 1.25rem;
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+  color: var(--color-primary);
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4);
+}
+
+.tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  background: linear-gradient(to top, rgba(0, 255, 65, 0.1), transparent);
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+/* INPUT GLASS UTILITY */
+.input-glass {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 0.8rem;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: var(--font-mono);
+}
+
+.input-glass:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 15px rgba(0, 255, 65, 0.15);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Stronger glass treatment for non-dashboard panels to match HUD feel */
+.glass-panel.panel-strong {
+  background: rgba(6, 14, 10, 0.9);
+  border: 1px solid rgba(0, 255, 65, 0.25);
+  box-shadow:
+    0 24px 50px rgba(0, 0, 0, 0.7),
+    inset 0 0 18px rgba(0, 0, 0, 0.6);
+  border-radius: 22px;
+}
+
+.glass-panel.panel-strong::before {
+  opacity: 0.85;
+}
+
+/* --- CYBER-HUD GLOBAL SYSTEM (V3) --- */
+
+/* ANIMATIONS */
+@keyframes hud-boot {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.9);
+    filter: blur(10px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes border-breathe {
+  0% {
+    border-color: rgba(0, 255, 65, 0.15);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  }
+
+  50% {
+    border-color: rgba(0, 255, 65, 0.35);
+    box-shadow: 0 0 30px rgba(0, 255, 65, 0.05), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  }
+
+  100% {
+    border-color: rgba(0, 255, 65, 0.15);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* GLASS SLAB (The container) */
+.glass-slab {
+  width: 100%;
+  max-width: 900px;
+  /* Default wide */
+  background: rgba(8, 8, 8, 0.96);
+  border: 1px solid rgba(0, 255, 65, 0.25);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  /* Default Animation */
+  animation: hud-boot 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards, border-breathe 4s infinite ease-in-out;
+}
+
+/* Scanlines */
+.glass-slab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(0, 255, 65, 0.02) 1px, transparent 1px);
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Z-Index Fix for Content */
+.slab-header,
+.slab-body,
+.slab-footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* HEADER */
+.slab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.15);
+}
+
+.hud-title {
+  color: var(--color-primary-dim);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+/* STATUS CHIP */
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  background: rgba(0, 255, 65, 0.05);
+  color: var(--color-primary);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+}
+
+.status-chip.locked {
+  color: #ff5555;
+  border-color: rgba(255, 80, 80, 0.3);
+  background: rgba(255, 0, 0, 0.05);
+}
+
+.led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* BODY */
+.slab-body {
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+/* Staggered Entry Helper */
+.slab-body>div {
+  animation: fade-in-up 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+.slab-body>div:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.slab-body>div:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.slab-body>div:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* FOOTER */
+.slab-footer {
+  padding: 1.5rem 2rem;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* BRACKETS (Input Wrapper) */
+.brackets {
+  position: relative;
+  padding: 0 6px;
+}
+
+.brackets::before,
+.brackets::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  border-right: none;
+  transition: border-color 0.2s;
+}
+
+.brackets::before {
+  left: 0;
+}
+
+.brackets::after {
+  right: 0;
+  border-left: none;
+  border-right: 1px solid rgba(0, 255, 65, 0.3);
+}
+
+.brackets:focus-within::before,
+.brackets:focus-within::after {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px rgba(0, 255, 65, 0.2);
+}
+
+/* NEON GLOW TEXT */
+.neon-glow {
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.6);
+}
+
+/* --- BALANCE HIDE FEATURE --- */
+.blurred {
+  filter: blur(6px);
+  user-select: none;
+}
+
+.wallet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem;
+}
+
+.btn-hide {
+  font-size: 0.65rem;
+  padding: 0.4rem 0.8rem;
+  opacity: 0.6;
+}
+
+.btn-hide:hover {
+  opacity: 1;
+}
+
+/* --- PRIVACY TOGGLES (EYE ICONS) --- */
+.btn-eye {
+  background: transparent !important;
+  border: none !important;
+  padding: 0;
+  margin: 0;
+  /* Handled by gap in header-left */
+  cursor: pointer;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: unset;
+}
+
+.btn-eye img {
+  width: 24px;
+  height: auto;
+  filter: drop-shadow(0 0 2px rgba(0, 255, 65, 0.3));
+}
+
+.btn-eye:hover {
+  opacity: 1;
+  transform: scale(1.1);
+  box-shadow: none !important;
+}
+
+.btn-eye:hover img {
+  filter: drop-shadow(0 0 5px rgba(0, 255, 65, 0.8));
+}
+
+/* Header Layout */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Activity Privacy Mask */
+.activity-mask {
+  filter: blur(5px);
+  user-select: none;
+  pointer-events: none;
+  opacity: 0.5;
+  transition: all 0.3s ease;
+}
