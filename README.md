@@ -1,7 +1,7 @@
 # Hemp0x Commander
 
 <p align="center">
-  <img src="src/assets/logonew.png" alt="Hemp0x Commander" width="180" />
+  <img src="src/assets/hemp0xgit.png" alt="Hemp0x Commander" width="180" />
 </p>
 
 <p align="center">
