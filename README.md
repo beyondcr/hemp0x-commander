@@ -13,18 +13,10 @@
 
   <br />
 
-  <a href="https://hemp0x.com">
-    <img src="https://img.shields.io/badge/WEBSITE-hemp0x.com-000000?style=for-the-badge&logo=globe&logoColor=00ff00&labelColor=000000" alt="Website" />
-  </a>
-  <a href="https://github.com/beyondcr/hemp0x-commander/releases">
-    <img src="https://img.shields.io/badge/DOWNLOAD-v1.2-000000?style=for-the-badge&logo=windows&logoColor=00ff00&labelColor=000000" alt="Download" />
-  </a>
-  <a href="https://discord.gg/FMEKJUwcsu">
-    <img src="https://img.shields.io/badge/DISCORD-JOIN_US-000000?style=for-the-badge&logo=discord&logoColor=00ff00&labelColor=000000" alt="Discord" />
-  </a>
-  <a href="docs/BUILDING.md">
-    <img src="https://img.shields.io/badge/DOCS-BUILD_GUIDES-000000?style=for-the-badge&logo=rust&logoColor=00ff00&labelColor=000000" alt="Build Guides" />
-  </a>
+  [![Website](https://img.shields.io/badge/WEBSITE-hemp0x.com-000000?style=for-the-badge&logo=globe&logoColor=00ff00&labelColor=000000)](https://hemp0x.com)
+  [![Download](https://img.shields.io/badge/DOWNLOAD-v1.2-000000?style=for-the-badge&logo=windows&logoColor=00ff00&labelColor=000000)](https://github.com/beyondcr/hemp0x-commander/releases)
+  [![Discord](https://img.shields.io/badge/DISCORD-JOIN_US-000000?style=for-the-badge&logo=discord&logoColor=00ff00&labelColor=000000)](https://discord.gg/FMEKJUwcsu)
+  [![Build Guides](https://img.shields.io/badge/DOCS-BUILD_GUIDES-000000?style=for-the-badge&logo=rust&logoColor=00ff00&labelColor=000000)](docs/BUILDING.md)
 </div>
 
 <br />
