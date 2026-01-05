@@ -5,7 +5,7 @@
     <img src="src/assets/hemp0xgit.png" alt="Hemp0x Logo" width="160" />
   </a>
 
-  <h3>The Official Graphical Interface for the Hemp0x Blockchain</h3>
+  <h3>Interface for the Hemp0x Blockchain</h3>
 
   <p>
     A secure, non-custodial, and cross-platform dashboard for managing your node and assets.
@@ -14,16 +14,16 @@
   <br />
 
   <a href="https://hemp0x.com">
-    <img src="https://img.shields.io/badge/WEBSITE-hemp0x.com-333333?style=for-the-badge&logo=globe&logoColor=white&labelColor=101010" alt="Website" />
+    <img src="https://img.shields.io/badge/WEBSITE-hemp0x.com-000000?style=for-the-badge&logo=globe&logoColor=00ff00&labelColor=000000" alt="Website" />
   </a>
   <a href="https://github.com/beyondcr/hemp0x-commander/releases">
-    <img src="https://img.shields.io/badge/DOWNLOAD-v1.2-333333?style=for-the-badge&logo=windows&logoColor=white&labelColor=101010" alt="Download" />
+    <img src="https://img.shields.io/badge/DOWNLOAD-v1.2-000000?style=for-the-badge&logo=windows&logoColor=00ff00&labelColor=000000" alt="Download" />
   </a>
   <a href="https://discord.gg/FMEKJUwcsu">
-    <img src="https://img.shields.io/badge/DISCORD-JOIN_US-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=101010" alt="Discord" />
+    <img src="https://img.shields.io/badge/DISCORD-JOIN_US-000000?style=for-the-badge&logo=discord&logoColor=00ff00&labelColor=000000" alt="Discord" />
   </a>
   <a href="docs/BUILDING.md">
-    <img src="https://img.shields.io/badge/DOCS-BUILD_GUIDES-333333?style=for-the-badge&logo=rust&logoColor=white&labelColor=101010" alt="Build Guides" />
+    <img src="https://img.shields.io/badge/DOCS-BUILD_GUIDES-000000?style=for-the-badge&logo=rust&logoColor=00ff00&labelColor=000000" alt="Build Guides" />
   </a>
 </div>
 
