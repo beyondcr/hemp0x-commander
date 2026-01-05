@@ -37,23 +37,24 @@
 
 **Hemp0x Commander** brings the power of the Hemp0x blockchain to your desktop. Built with **Tauri v2** (Rust) and **Svelte 5**, it combines the security of a local full node with the ease of use of a modern web application.
 
-> **⚠️ STATE: HEAVY ACTIVE DEVELOPMENT**
+> [!CAUTION]
+> ### 🛑 STATE: HEAVY ACTIVE DEVELOPMENT
+> **This software is currently in Beta (v1.2). While functional, it is evolving rapidly.**
 >
-> This software is currently in **Beta (v1.2)**. While functional, it is evolving rapidly.
-> *   Expect bugs.
-> *   Expect UI changes.
-> *   **USE AT YOUR OWN RISK.** We are not responsible for lost funds or data.
-> *   Always backup your `wallet.dat`.
+> *   🐛 **Expect bugs.**
+> *   🎨 **Expect UI changes.**
+> *   💀 **USE AT YOUR OWN RISK.** We are not responsible for lost funds or data.
+> *   💾 **Always backup your `wallet.dat`.**
 
 ### ✨ Key Features
 
 | Feature | Description | Status |
 | :--- | :--- | :--- |
-| **🪙 Asset Management** | Issue assets and view ownership. Metadata support coming soon. | 🚧 **In Testing** |
-| **🛡️ Privacy First** | Connects to your own local `hemp0xd` node via authenticated RPC. | ✅ Stable |
-| **🔧 Coin Control** | (Advanced) Manually select which UTXOs to spend. Optimize privacy. | ✅ Stable |
-| **🖥️ Node Control** | Start/Stop daemon, view sync, peer count, and network difficulty. | ✅ Stable |
-| **🔒 Encryption** | AES-256 local wallet encryption. | ✅ Stable |
+| **🪙 Asset Management** | Issue, reissue, and transfer unique Hemp0x assets directly from the UI. Visualize your portfolio with rich metadata. | 🚧 **In Testing** |
+| **🛡️ Privacy First** | Connects to your own local `hemp0xd` node via authenticated RPC. No third-party servers track your transactions. | 🚧 **In Testing** |
+| **🔧 Coin Control** | (Advanced) Manually select which UTXOs to spend. Optimize privacy or reduce transaction fees. | 🚧 **In Testing** |
+| **🖥️ Node Control** | Start, stop, and monitor your blockchain daemon seamlessly. View sync progress, peer count, and network difficulty. | 🚧 **In Testing** |
+| **🔒 Encryption** | Secures your wallet with AES-256 encryption. Unlock only when necessary to sign transactions. | 🚧 **In Testing** |
 
 ---
 
