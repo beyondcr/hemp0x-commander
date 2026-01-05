@@ -54,7 +54,7 @@
 
 ---
 
-## 📸 Visual Tour
+## 📸 Screenshots
 
 <div align="center">
 
