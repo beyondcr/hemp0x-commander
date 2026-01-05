@@ -96,7 +96,7 @@ Don't keep it to yourself.
 
 **Prerequisites:** Node.js v18+, Rust Stable.
 
-**Critical Note:** You must manually place `hemp0xd` and `hemp0x-cli` into the `src-tauri/` folder before building.
+**Critical Note:** You must manually place `hemp0xd` and `hemp0x-cli` into the `src-tauri/` folder. **Crucially, they must retain their target triple suffix** (e.g., `hemp0xd-x86_64-pc-windows-msvc.exe`) for the Tauri builder to detect them.
 
 ```bash
 npm install
