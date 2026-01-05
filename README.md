@@ -1,89 +1,96 @@
 # Hemp0x Commander
 
-<p align="center">
-  <img src="src/assets/hemp0xgit.png" alt="Hemp0x Commander" width="180" />
-</p>
+<div align="center">
 
-<p align="center">
-  <b>The Official Graphical Interface for the Hemp0x Blockchain</b>
-  <br />
-  <a href="https://hemp0x.com">Website</a> • 
-  <a href="https://github.com/beyondcr/hemp0x-commander/releases">Download</a> • 
-  <a href="docs/BUILDING.md">Build Guides</a>
-</p>
+```
+██╗  ██╗███████╗███╗   ███╗██████╗  ██████╗ ██╗  ██╗
+██║  ██║██╔════╝████╗ ████║██╔══██╗██╔═████╗╚██╗██╔╝
+███████║█████╗  ██╔████╔██║██████╔╝██║██╔██║ ╚███╔╝ 
+██╔══██║██╔══╝  ██║╚██╔╝██║██╔═══╝ ████╔╝██║ ██╔██╗ 
+██║  ██║███████╗██║ ╚═╝ ██║██║     ╚██████╔╝██╔╝ ██╗
+╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝
+```
+
+<img src="src/assets/hemp0xgit.png" width="120" />
+
+<br>
+
+<a href="https://hemp0x.com">
+  <img src="https://img.shields.io/badge/OFFICIAL-WEBSITE-00ff00?style=for-the-badge&logo=globe&logoColor=black&labelColor=black" alt="Website">
+</a>
+<a href="https://github.com/beyondcr/hemp0x-commander/releases">
+  <img src="https://img.shields.io/badge/DOWNLOAD-v1.2-00ff00?style=for-the-badge&logo=windows&logoColor=black&labelColor=black" alt="Download">
+</a>
+<a href="docs/BUILDING.md">
+  <img src="https://img.shields.io/badge/BUILD-GUIDES-00ff00?style=for-the-badge&logo=rust&logoColor=black&labelColor=black" alt="Build">
+</a>
+
+</div>
 
 ---
 
 ![Dashboard Preview](docs/images/dashboard.png)
 
-## ⚡ Overview
+## ⚡ SYSTEM_OVERVIEW
 
-**Hemp0x Commander** is a secure, non-custodial wallet and node manager built with **Tauri v2** (Rust) and **Svelte 5**. It is designed for speed, privacy, and ease of use, running natively on Windows and Linux.
+**Hemp0x Commander** is a terminal-inspired, non-custodial interface for the Hemp0x Blockchain. Built with **Tauri v2** and **Svelte 5**, it merges the raw power of the command line with the usability of a modern GUI. 
 
-### Key Features
-- **🪙 Asset Management:** Issue, reissue, and transfer custom Hemp0x assets natively.
-- **🛡️ Non-Custodial:** Your private keys never leave your machine (`wallet.dat` stays local).
-- **🔧 Advanced Coin Control:** Manual UTXO selection for precision transaction building.
-- **🖥️ Node Management:** Built-in control for the bundled `hemp0xd` background service.
-- **🔒 Encrypted Communication:** Interacts securely with your local node via RPC.
+`>_ SECURE SESSION ESTABLISHED`
+
+### [ MODULES_LOADED ]
+- **[Asset_Mgmt]**: Issue, reissue, and transfer custom assets natively.
+- **[Non_Custodial]**: Private keys remain encrypted locally. `wallet.dat` never leaves your machine.
+- **[Coin_Control]**: Manual UTXO selection for precision transaction building.
+- **[Node_Link]**: Direct RPC uplink to the bundled `hemp0xd` daemon.
+- **[Encrypted]**: AES-256 local wallet encryption.
 
 ---
 
-## 📸 Screenshots
+## 📸 VISUAL_LOGS
 
-| System Status | About & Credits |
+| [SYSTEM_STATUS] | [ABOUT_KERNEL] |
 |:---:|:---:|
 | ![System Tab](docs/images/system.png) | ![About Tab](docs/images/about.png) |
 
 ---
 
-## 📦 Installation
+## 📦 DEPLOYMENT_PROTOCOLS
 
-### Windows
-1.  Download the **Installer** (`.exe`) or **Portable Zip** from [Releases](https://github.com/beyondcr/hemp0x-commander/releases).
-2.  Run the installer or extract the zip.
-3.  Launch `Hemp0x Commander.exe`.
+### :: WINDOWS ::
+1.  **Acquire**: Download the **Installer** (`.exe`) or **Portable Zip** from [Releases](https://github.com/beyondcr/hemp0x-commander/releases).
+2.  **Execute**: Run `Hemp0x Commander.exe`.
 
-### Linux
-1.  Download the **AppImage** from [Releases](https://github.com/beyondcr/hemp0x-commander/releases).
-2.  Make executable: `chmod +x Hemp0x_Commander_*.AppImage`.
-3.  Run: `./Hemp0x_Commander_*.AppImage`.
+### :: LINUX ::
+1.  **Acquire**: Download the **AppImage** from [Releases](https://github.com/beyondcr/hemp0x-commander/releases).
+2.  **Permission**: `chmod +x Hemp0x_Commander_*.AppImage`.
+3.  **Execute**: `./Hemp0x_Commander_*.AppImage`.
 
 ---
 
-## 🛠️ Building from Source
+## 🛠️ COMPILATION_SOURCE
 
-To compile the application yourself, you will need **Rust**, **Node.js**, and the **Hemp0x Core Binaries**.
+To compile from source, you must manually bridge the core binaries.
 
-### 1. Place Core Binaries
-The application requires the blockchain daemon (`hemp0xd`) and CLI (`hemp0x-cli`) to function. You must compile these or download them and place them in the `src-tauri` directory.
+### 1. [INJECT_BINARIES]
+To prevent repository bloat, the core daemon is **NOT** tracked in git. You must place them manually:
 
-- **Windows:**
-  - `src-tauri/hemp0xd.exe`
-  - `src-tauri/hemp0x-cli.exe`
+- **Windows**: `src-tauri/hemp0xd.exe` & `src-tauri/hemp0x-cli.exe`
+- **Linux**: `src-tauri/hemp0xd` & `src-tauri/hemp0x-cli`
 
-- **Linux:**
-  - `src-tauri/hemp0xd`
-  - `src-tauri/hemp0x-cli`
-
-### 2. Build Commands
+### 2. [EXECUTE_BUILD]
 ```bash
-# Install dependencies
 npm install
-
-# Run in Development Mode (Hot Reload)
-npm run tauri dev
-
-# Build for Production
 npm run tauri build
 ```
-
-See [docs/BUILDING.md](docs/BUILDING.md) for detailed compilation instructions.
+*(See [BUILDING.md](docs/BUILDING.md) for full schematic)*
 
 ---
 
-## ⚙️ Data Locations
+## ⚙️ DATA_DIRECTORIES
+
+`>_ TARGET_LOCATIONS:`
+
 - **Windows:** `%APPDATA%\Hemp0x`
 - **Linux:** `~/.hemp0x`
 
-This folder contains your `wallet.dat`, `hemp.conf`, and blockchain data. **Always backup your wallet.dat!**
+*CRITIAL WARNING: Always backup `wallet.dat` before executing new versions.*
