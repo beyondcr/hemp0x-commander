@@ -1,130 +1,51 @@
 #!/bin/bash
 set -euo pipefail
 
-# ==============================================================================
-# HEMP0X WINDOWS BUILDER (ROBUST STAGE FIX)
-# Target: Windows 64-bit (.exe) on Nobara/Fedora
-# Fixes: "cp: cannot stat" (Searches for headers/libs instead of assuming path)
-# Fixes: All previous issues (Boost, Hash, DLLs, etc.)
-# ==============================================================================
+# ═══════════════════════════════════════════════════════════════════════════
+# Hemp0x Windows Installer (Cross-Compile on Linux)
+# Target: Windows 64-bit (.exe)
+# Host System: Nobara Linux / Ubuntu
+# ═══════════════════════════════════════════════════════════════════════════
 
-# 1. SAFETY CHECK
-if [ "$EUID" -eq 0 ]; then
-  echo "ERROR: DO NOT RUN AS ROOT!"
-  echo "Please run as your normal user."
-  exit 1
-fi
+# === CONFIGURATION ===
+# Using the FIXED fork/branch to ensure the Asset Activation fix is included
+REPO_URL="https://github.com/beyondcr/hemp0x-core.git"
+BRANCH="feature/activation-block-265000"
 
-WORK_DIR="$HOME/hemp0x-win-build"
-CACHE_DIR="$HOME/hemp0x-sources"
+# Install to directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_DIR="$SCRIPT_DIR/hemp0x-core-win"
 MINGW_HOST="x86_64-w64-mingw32"
 
-# Verified Hash for MiniUPnPc
-UPNP_FILE="miniupnpc-2.0.20170509.tar.gz"
-UPNP_HASH="d3c368627f5cdfb66d3ebd64ca39ba54d6ff14a61966dbecb8dd296b7039f16a"
-UPNP_URL="https://bitcoincore.org/depends-sources/$UPNP_FILE"
+echo "═══════════════════════════════════════════════════════"
+echo "     Hemp0x Windows Builder (Cross-Compile)            "
+echo "═══════════════════════════════════════════════════════"
+echo "Source: $REPO_URL ($BRANCH)"
+echo "Build location: $BUILD_DIR"
+echo "Target: Windows 64-bit"
+echo ""
+read -p "Continue? (y/n) " -n 1 -r
+echo
+[[ ! $REPLY =~ ^[Yy]$ ]] && { echo "Cancelled."; exit 0; }
 
-# # echo ">>> [1/9] System Prep (Nobara/Fedora)..."
-# # if command -v dnf >/dev/null 2>&1; then
-# #     # sudo dnf install -y mingw64-gcc-c++ mingw64-filesystem mingw64-headers \
-# #     #                     make automake gcc-c++ libtool patch python3 zip git \
-# #     #                     python3-setuptools wget
-# #     echo "Skipping System Prep (Assumed Installed)"
-# # else
-# #     echo "ERROR: 'dnf' not found. This script is for Nobara/Fedora."
-# #     exit 1
-# # fi
+echo ""
+echo ">>> 1. Preparing Workspace..."
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
 
-echo ">>> [2/9] Managing Download Cache..."
-mkdir -p "$CACHE_DIR"
+echo ">>> 2. Cloning Hemp0x Network..."
+git clone "$REPO_URL" "$BUILD_DIR"
+cd "$BUILD_DIR"
+git checkout "$BRANCH"
 
-FILE_PATH="$CACHE_DIR/$UPNP_FILE"
-NEED_DOWNLOAD=true
+echo ">>> 3. Applying Build System Fixes (Windows/MinGW)..."
 
-if [ -f "$FILE_PATH" ]; then
-    echo "Checking existing miniupnpc..."
-    CURRENT_HASH=$(sha256sum "$FILE_PATH" | awk '{print $1}')
-    if [ "$CURRENT_HASH" == "$UPNP_HASH" ]; then
-        echo " - MiniUPnPc verified. Skipping download."
-        NEED_DOWNLOAD=false
-    else
-        echo " - Hash mismatch. Deleting..."
-        rm -f "$FILE_PATH"
-    fi
-fi
-
-if [ "$NEED_DOWNLOAD" = true ]; then
-    echo "Downloading $UPNP_FILE from reliable mirror..."
-    wget -O "$FILE_PATH" "$UPNP_URL"
-
-    # Verify again
-    CURRENT_HASH=$(sha256sum "$FILE_PATH" | awk '{print $1}')
-    if [ "$CURRENT_HASH" != "$UPNP_HASH" ]; then
-        echo "ERROR: Download failed. Hash mismatch."
-        exit 1
-    fi
-fi
-
-echo ">>> [3/9] Workspace Setup..."
-if [ -d "$WORK_DIR" ]; then rm -rf "$WORK_DIR"; fi
-mkdir -p "$WORK_DIR"
-cd "$WORK_DIR"
-
-echo ">>> [4/9] Cloning Hemp0x..."
-git clone https://github.com/hemp0x/hemp0x-core.git
-cd hemp0x-core
-
-# Link Cache
-rm -rf depends/sources
-ln -sf "$CACHE_DIR" depends/sources
-
-echo ">>> [5/9] Rebranding..."
-sed -i '/CMempoolAddressDeltaKey/s/\bRVN\b/HEMP/g' src/txmempool.cpp
-sed -i '/#include <algorithm>/a #include <stdexcept>' src/support/lockedpool.cpp
-sed -i 's/ravend/hemp0xd/g' src/Makefile.am
-sed -i 's/raven-cli/hemp0x-cli/g' src/Makefile.am
-sed -i 's/raven-tx/hemp0x-tx/g' src/Makefile.am
-sed -i 's/raven_cli/hemp0x_cli/g' src/Makefile.am
-sed -i 's/raven_tx/hemp0x_tx/g' src/Makefile.am
-[ -f src/ravend.cpp ] && mv src/ravend.cpp src/hemp0xd.cpp
-[ -f src/raven-cli.cpp ] && mv src/raven-cli.cpp src/hemp0x-cli.cpp
-[ -f src/raven-tx.cpp ] && mv src/raven-tx.cpp src/hemp0x-tx.cpp
-sed -i 's/Ravencoin Core/Hemp0x Core/g' configure.ac src/init.cpp
-sed -i 's/Raven Core/Hemp0x Core/g' configure.ac src/init.cpp
-sed -i 's/Ravencoin/Hemp0x/g' src/init.cpp
-find src -name "*.cpp" -print0 | xargs -0 sed -i 's/"\.raven"/"\.hemp0x"/g'
-
-echo ">>> [6/9] Applying Source Code Fixes..."
-if [ -f src/util.cpp ]; then
-  grep -q 'boost/thread/locks.hpp' src/util.cpp || \
-    sed -i '/#include <boost\/thread\/mutex.hpp>/a #include <boost/thread/locks.hpp>' src/util.cpp
-  perl -pi -e 's/\bboost::mutex::scoped_lock\b/boost::unique_lock<boost::mutex>/g' src/util.cpp
-fi
-if [ -f src/sync.h ]; then
-  sed -i 's/typedef[[:space:]]\+boost::condition_variable[[:space:]]\+CConditionVariable;/typedef boost::condition_variable_any CConditionVariable;/' src/sync.h
-fi
-if [ -f src/rpc/mining.cpp ]; then
-  grep -q 'boost/chrono.hpp' src/rpc/mining.cpp || \
-    sed -i '/#include <boost\/thread\/condition_variable.hpp>/a #include <boost/chrono.hpp>' src/rpc/mining.cpp
-  perl -0777 -pi -e 's/\bif\s*\(\s*!\s*cvBlockChange\.timed_wait\(\s*lock\s*,\s*checktxtime\s*\)\s*\)/const auto _wait_ms = (checktxtime - boost::get_system_time()).total_milliseconds();\n                if (cvBlockChange.wait_for(lock, boost::chrono::milliseconds(_wait_ms > 0 ? _wait_ms : 0)) == boost::cv_status::timeout)/g' src/rpc/mining.cpp
-fi
-if [ -f src/bench/bench.h ]; then
-  grep -q '^#include <cstdint>' src/bench/bench.h || \
-    sed -i 's|#include <boost/preprocessor/stringize.hpp>|#include <boost/preprocessor/stringize.hpp>\n#include <cstdint>|' src/bench/bench.h
-fi
-
-echo ">>> [7/9] Generating Dependency Patches..."
-mkdir -p depends/patches/zeromq
-cat > depends/patches/zeromq/remove_libstd_link.patch <<'PATCH'
---- a/AUTHORS
-+++ b/AUTHORS
-@@ -1,1 +1,2 @@
-+
-PATCH
-
-cat > patch_depends.py <<'END_OF_PYTHON'
+# --- GENERATE ROBUST DEPENDENCY PATCH (From build_windows_binaries_on_linux.sh) ---
+cat > fix_depends_win.py <<'PY'
 import pathlib
 root = pathlib.Path("depends/packages")
+if not root.exists(): exit(0)
+
 boost_mk = root / "boost.mk"
 bdb_mk   = root / "bdb.mk"
 upnp_mk  = root / "miniupnpc.mk"
@@ -219,10 +140,7 @@ __TAB__printf "#ifndef HEMP0X_BDB48_DB_CXX_WRAPPER_H\n#define HEMP0X_BDB48_DB_CX
 endef
 '''
 
-# === MINIUPNPC PATCH (ROBUST STAGING) ===
-# 1. Manually generates header.
-# 2. Builds static library.
-# 3. Robust staging: searches for headers/libs wherever they are.
+# === MINIUPNPC PATCH ===
 upnp_content = r'''package=miniupnpc
 $(package)_version=2.0.20170509
 $(package)_download_path=https://bitcoincore.org/depends-sources/
@@ -266,20 +184,26 @@ __TAB__fi
 endef
 '''
 
+# REPLACE PLACEHOLDERS
 boost_mk.write_text(boost_content.replace("__TAB__", "\t"))
 bdb_mk.write_text(bdb_content.replace("__TAB__", "\t"))
 upnp_mk.write_text(upnp_content.replace("__TAB__", "\t"))
-END_OF_PYTHON
+PY
 
-python3 patch_depends.py
+python3 fix_depends_win.py
 echo "    Patches Applied."
 
-echo ">>> [8/9] Building Dependencies (Target: Windows 64-bit)..."
+echo ">>> 4. Building Dependencies (MinGW-w64)..."
+# We remove old work to prevent corruption
+rm -rf depends/work depends/built depends/*-mingw32
+# NO_QT=1 because we only need the daemon/cli
 make -C depends HOST="$MINGW_HOST" NO_QT=1 -j"$(nproc)"
 
-echo ">>> [9/9] Compiling Hemp0x Core..."
+# --- 5. Configure & Build ---
+echo ">>> 5. Configuring & Compiling..."
 ./autogen.sh
 
+# Use the depends configuration
 CONFIG_SITE="$PWD/depends/$MINGW_HOST/share/config.site" \
 ./configure --prefix=/ \
             --host="$MINGW_HOST" \
@@ -290,34 +214,17 @@ CONFIG_SITE="$PWD/depends/$MINGW_HOST/share/config.site" \
 
 make -j"$(nproc)"
 
-# --- PACKAGING ---
-if [ -f "src/hemp0xd.exe" ]; then
-    echo "=========================================================="
-    echo "SUCCESS: Windows Binaries Created!"
-    echo "=========================================================="
-
-    cd ..
-    mkdir -p Hemp0x-Win64
-    cp hemp0x-core/src/hemp0xd.exe Hemp0x-Win64/
-    cp hemp0x-core/src/hemp0x-cli.exe Hemp0x-Win64/
-
-    cat > Hemp0x-Win64/hemp.conf <<EOF
-rpcuser=hemp0xuser
-rpcpassword=hemp0xpassword
-addnode=154.38.164.123:42069
-addnode=147.93.185.184:42069
-EOF
-
-    cat > Hemp0x-Win64/start_node.bat <<EOF
-@echo off
-echo Starting Hemp0x Node...
-hemp0xd.exe -conf=hemp.conf
-pause
-EOF
-
-    zip -r hemp0x-win64.zip Hemp0x-Win64
-    echo "Binaries Zipped: $WORK_DIR/hemp0x-win64.zip"
+echo ">>> 6. Verifying Build..."
+if [ -f "src/hemp0xd.exe" ] && [ -f "src/hemp0x-cli.exe" ]; then
+    echo ""
+    echo "═══════════════════════════════════════════════════════"
+    echo "          ✓✓✓ WINDOWS BUILD SUCCESSFUL ✓✓✓             "
+    echo "═══════════════════════════════════════════════════════"
+    echo ""
+    ls -lh src/hemp0xd.exe src/hemp0x-cli.exe
+    echo ""
+    echo "Location: $BUILD_DIR/src/"
 else
-    echo "ERROR: Compilation finished but .exe not found."
+    echo "✗ BUILD FAILED - Check output above"
     exit 1
 fi
