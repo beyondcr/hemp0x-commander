@@ -301,15 +301,9 @@
     const performPoll = async () => {
       await refreshDashboard();
 
-      // Determine next poll delay based on health
-      // If syncing (yellow) or error (red), slow down to reduce load
-      // If fully green, keep it snappy
-      let delay = 2000;
-      if (systemStatus === "yellow") {
-        delay = 8000; // Slow down during sync
-      } else if (systemStatus === "red") {
-        delay = 3000; // Faster retry (was 10s) to make UI feel responsive
-      }
+      let delay = 5000;
+      if (systemStatus === "yellow") delay = 8000;
+      else if (systemStatus === "red") delay = 5000;
 
       timer = setTimeout(performPoll, delay);
     };

@@ -600,8 +600,10 @@ fn dashboard_data() -> Result<DashboardData, String> {
         let h = bc_info["headers"].as_u64().unwrap_or(0);
         let progress = bc_info["verificationprogress"].as_f64().unwrap_or(0.0);
         let initial_dl = bc_info["initialblockdownload"].as_bool().unwrap_or(false);
-        // Synced if: headers known, blocks >= headers, progress >= 99.9%, and not in initial download
-        let is_synced = h > 0 && b >= h && progress >= 0.999 && !initial_dl;
+        let mtp = bc_info["mediantime"].as_i64().unwrap_or(0);
+        let now = Local::now().timestamp();
+        // Synced if: headers known, blocks >= headers, progress high, not IBD, and MTP within 90 mins (avoids stall false positives)
+        let is_synced = h > 0 && b >= h && progress >= 0.999 && !initial_dl && (now - mtp) < 5400;
         (b, h, is_synced)
       } else {
         (blocks_info, blocks_info, false) // Fallback: unknown sync status
