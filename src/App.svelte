@@ -118,7 +118,14 @@
     // Optimization: prevent reactivity churn if already offline
     if (nodeInfo.state === "OFFLINE" && lastError === reason) return;
 
-    nodeInfo = { state: "OFFLINE", blocks: "--", peers: "--", diff: "--" };
+    nodeInfo = {
+      state: "OFFLINE",
+      blocks: "--",
+      headers: "--",
+      peers: "--",
+      diff: "--",
+      synced: false,
+    };
     walletInfo = {
       balance: "--",
       pending: "--",
