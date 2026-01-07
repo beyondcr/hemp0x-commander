@@ -2,7 +2,20 @@
 
 All notable changes to Hemp0x Commander are documented here.
 
-## [1.3.0] - 2026-01-07
+## [1.3.0] (WIP) - 2026-01-07
+
+### Wallet & Encryption
+- **Streamlined Workflow:**
+  - New Wallet creation now pauses appropriately to stop/start the node, preventing UI freezes.
+  - "Restore Wallet" now opens file picker directly (removed manual path entry).
+- **Encryption UI:**
+  - Added specific warning about password loss ("LOSE ACCESS").
+  - Added "Encryption Complete" modal with manual start verification.
+  - Fixed argument mismatch causing encryption failures.
+- **UX/UI Polish:**
+  - Center-aligned all modals and popups.
+  - Added "Processing..." blocking overlay with spinner for long-running tasks.
+  - Fixed "Passwords do not match" toast z-index (now visible).
 
 ### New Stuff
 - **Network Tab** - New sub-tab under Tools for network diagnostics and peer management

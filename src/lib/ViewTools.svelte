@@ -471,28 +471,25 @@
   let passNew = "";
   let passNewConfirm = "";
   // --- WALLET WORKFLOW STATE (New) ---
+  // --- WALLET WORKFLOW STATE (Refined) ---
   let showConfirmModal = false;
-  let confirmTitle = "";
-  let confirmMessage = "";
-  let confirmAction = null; // Function to run on YES
-  let confirmCancel = null; // Function to run on NO (optional)
+  let modalTitle = "";
+  let modalMessage = "";
+  let modalButtons = []; // { label, style, onClick }
 
-  function askConfirmation(title, message, onYes, onNo = null) {
-    confirmTitle = title;
-    confirmMessage = message;
-    confirmAction = onYes;
-    confirmCancel = onNo;
+  // Blocking Overlay State
+  let isProcessing = false;
+  let processingMessage = "Processing...";
+
+  function openModal(title, message, buttons) {
+    modalTitle = title;
+    modalMessage = message;
+    modalButtons = buttons;
     showConfirmModal = true;
   }
 
-  function handleConfirmYes() {
+  function closeModal() {
     showConfirmModal = false;
-    if (confirmAction) confirmAction();
-  }
-
-  function handleConfirmNo() {
-    showConfirmModal = false;
-    if (confirmCancel) confirmCancel();
   }
 
   // --- REFACTORED WALLET ACTIONS ---
@@ -534,61 +531,77 @@
   }
 
   function askRestartNode() {
-    askConfirmation(
-      "RESTART NODE?",
-      "A restart is required to apply changes. Restart now?",
-      async () => {
-        showToast("Restarting node...", "info");
-        try {
-          await core.invoke("stop_node");
-          // Give it a moment to stop
-          setTimeout(async () => {
-            // For now we just stop. The user or the watchdog might restart it,
-            // but let's try to start it if we can, or just tell user to restart.
-            // Actually, 'start_node' might not be exposed or reliable if the daemon binary is separate.
-            // Let's assume stopping is what we do and the main process or user handles start.
-            // But existing code implies we just want to restart.
-            // Let's use standard restart logic if we have it, or just stop.
-            // Looking at previous code, it relied on backend flags 'restartNode'.
-            // We can't use that if we are doing manual steps.
-            // Let's try to invoke "start_node" assuming it exists in the rust backend
-            // (it is common in these hemp0x apps).
-            await core.invoke("start_node", { reindex: false });
-            showToast("Node Restarted", "success");
-          }, 3000);
-        } catch (e) {
-          // If start_node doesn't exist, just say Node Stopped.
-          showToast(
-            "Node Stopped. Please restart manually if it doesn't return.",
-            "warning",
-          );
-        }
+    openModal("RESTART NODE?", "A restart is required to apply changes.", [
+      {
+        label: "RESTART NOW",
+        style: "primary",
+        onClick: async () => {
+          closeModal();
+          showToast("Restarting node...", "info");
+          try {
+            await core.invoke("stop_node");
+            setTimeout(async () => {
+              await core.invoke("start_node", { reindex: false });
+              showToast("Node Restarted", "success");
+            }, 3000);
+          } catch (e) {
+            showToast("Node Stopped. Please restart manually.", "warning");
+          }
+        },
       },
-    );
+      {
+        label: "LATER",
+        style: "ghost",
+        onClick: closeModal,
+      },
+    ]);
   }
 
   async function restoreWallet() {
     if (!tauriReady) return;
-    if (!restorePath) {
-      showToast("Enter path to backup file", "error");
+
+    // Step 1: Browse for file immediately
+    try {
+      const selected = await open({
+        title: "Select Wallet Backup",
+        multiple: false,
+        filters: [{ name: "Wallet Files", extensions: ["dat", "bak"] }],
+      });
+      if (!selected) return; // User cancelled browse
+      restorePath = selected;
+    } catch (err) {
+      showToast("Browse failed", "error");
       return;
     }
 
-    askConfirmation(
+    // Step 2: Confirm backup of current wallet
+    openModal(
       "BACKUP CURRENT WALLET?",
-      "Would you like to backup your current wallet.dat before overwriting it?",
-      async () => {
-        // YES
-        const backedUp = await backupWallet();
-        if (backedUp) proceedRestore();
-        // If backup cancelled/failed, we probably shouldn't proceed automatically unless user insists?
-        // Let's assumes if backup returns false (cancelled), we stop.
-        else showToast("Restore cancelled (Backup skipped/failed)", "warning");
-      },
-      () => {
-        // NO - Proceed directly
-        proceedRestore();
-      },
+      "Restoring a wallet will overwrite loaded wallet.dat! Backup first?",
+      [
+        {
+          label: "BACK UP",
+          style: "primary", // Leftmost / Primary
+          onClick: async () => {
+            closeModal(); // Close first to avoid overlap or weird states
+            const backedUp = await backupWallet();
+            if (backedUp) proceedRestore();
+          },
+        },
+        {
+          label: "SKIP",
+          style: "ghost",
+          onClick: () => {
+            closeModal();
+            proceedRestore();
+          },
+        },
+        {
+          label: "CANCEL",
+          style: "danger", // Rightmost / Danger
+          onClick: closeModal,
+        },
+      ],
     );
   }
 
@@ -611,32 +624,135 @@
 
   async function createNewWallet() {
     if (!tauriReady) return;
-    askConfirmation(
+    openModal(
       "BACKUP CURRENT WALLET?",
-      "Creating a new wallet will overwrite user.dat! Backup first?",
-      async () => {
-        const backedUp = await backupWallet();
-        if (backedUp) proceedNewWallet();
-        else
-          showToast("New Wallet cancelled (Backup skipped/failed)", "warning");
-      },
-      () => {
-        proceedNewWallet();
-      },
+      "Creating a new wallet will overwrite loaded wallet.dat! Backup first?",
+      [
+        {
+          label: "BACK UP",
+          style: "primary",
+          onClick: async () => {
+            closeModal();
+            const backedUp = await backupWallet();
+            if (backedUp) proceedNewWallet();
+          },
+        },
+        {
+          label: "SKIP",
+          style: "ghost",
+          onClick: () => {
+            closeModal();
+            proceedNewWallet();
+          },
+        },
+        {
+          label: "CANCEL",
+          style: "danger",
+          onClick: closeModal,
+        },
+      ],
     );
   }
 
+  // --- ENCRYPTION FLOW ---
+  let showEncryptModal = false;
+  let newEncPass = "";
+  let newEncPassConfirm = "";
+
   async function proceedNewWallet() {
     try {
-      showToast("Creating new wallet...", "info");
+      isProcessing = true;
+      processingMessage = "Stopping Node...";
+
+      // Step 1: Stop Node Explicitly (Improve Performance/Reliability)
+      await core.invoke("stop_node");
+
+      // wait 2s for process to unwind
+      await new Promise((r) => setTimeout(r, 2000));
+
+      processingMessage = "Creating Wallet Files...";
+
+      // Step 2: Create Wallet (Node is already stopped, so this is just file ops)
       await core.invoke("create_new_wallet", {
         backupExisting: false,
-        restartNode: false,
+        restartNode: false, // We handle start manually
       });
+
+      processingMessage = "Starting Node...";
+
+      // Step 3: Start Node
+      await core.invoke("start_node", { reindex: false });
+
+      isProcessing = false;
       showToast("New Wallet Created", "success");
-      askRestartNode();
+
+      // Delay slightly to let UI settle, then ask encrypt
+      setTimeout(() => {
+        askEncryptNewWallet();
+      }, 1500);
     } catch (e) {
+      isProcessing = false;
       showToast("Create Failed: " + e, "error");
+    }
+  }
+
+  function askEncryptNewWallet() {
+    openModal(
+      "ENCRYPT NEW WALLET?",
+      "Secure your wallet with a password now? (Recommended)",
+      [
+        {
+          label: "ENCRYPT",
+          style: "primary",
+          onClick: () => {
+            closeModal();
+            showEncryptModal = true;
+          },
+        },
+        {
+          label: "LEAVE UNENCRYPTED",
+          style: "danger",
+          onClick: closeModal,
+        },
+      ],
+    );
+  }
+
+  async function performWalletEncrypt() {
+    if (!newEncPass || newEncPass !== newEncPassConfirm) {
+      showToast("Passwords do not match", "error");
+      return;
+    }
+    showEncryptModal = false;
+
+    isProcessing = true;
+    processingMessage = "Encrypting Wallet (Node Stopping)...";
+
+    try {
+      // 'wallet_encrypt' command in backend calls 'encryptwallet <pass>'
+      // This RPC command STOPS the node.
+      await core.invoke("wallet_encrypt", { password: newEncPass });
+
+      // Wait a moment for the command to register
+      await new Promise((r) => setTimeout(r, 2000));
+
+      isProcessing = false;
+
+      // USER REQUEST: Manual Start Popup
+      openModal(
+        "ENCRYPTION COMPLETE",
+        "Your wallet is now encrypted. The node has been stopped for security.\n\nPlease start the node manually from the System tab or restart the app.",
+        [
+          {
+            label: "OK",
+            style: "primary",
+            onClick: closeModal,
+          },
+        ],
+      );
+    } catch (e) {
+      isProcessing = false;
+      showToast("Encryption Failed: " + e, "error");
     }
   }
 
@@ -862,14 +978,29 @@
       return;
     }
 
-    if (
-      !(await ask(
-        "Security Warning:\nThis will save UNENCRYPTED private keys to a file.\nAnyone with this file can access your funds.\n\nDo you want to proceed?",
-        { title: "DANGER: EXPORTING KEYS", kind: "warning" },
-      ))
-    ) {
-      return;
-    }
+    openModal(
+      "DANGER: EXPORTING KEYS",
+      "Security Warning:\nThis will save UNENCRYPTED private keys to a file.\nAnyone with this file can access your funds.\n\nDo you want to proceed?",
+      [
+        {
+          label: "PROCEED (DANGER)",
+          style: "danger",
+          onClick: () => {
+            closeModal();
+            performExport(selected);
+          },
+        },
+        {
+          label: "CANCEL",
+          style: "ghost",
+          onClick: closeModal,
+        },
+      ],
+    );
+  }
+
+  async function performExport(selected) {
+    if (!selected) return;
 
     try {
       const savePath = await save({
@@ -1177,24 +1308,11 @@
                     [ BACKUP WALLET.DAT ]
                   </button>
 
-                  <div class="divider"></div>
+                  <div class="laser-divider"></div>
 
-                  <label for="restore-path"
-                    >RESTORE FROM FILE (Enter Path)</label
-                  >
-                  <div class="input-wrapper brackets input-with-btn">
-                    <input
-                      id="restore-path"
-                      class="input-glass mono"
-                      placeholder="C:\Path\To\Backup.dat"
-                      bind:value={restorePath}
-                    />
-                    <button
-                      class="cyber-btn browse-btn"
-                      on:click={browseRestore}>BROWSE</button
-                    >
-                  </div>
-                  <div class="btn-row">
+                  <p class="desc">Restore wallet from file.</p>
+
+                  <div class="btn-row" style="gap: 1rem;">
                     <button
                       class="cyber-btn ghost wide"
                       on:click={restoreWallet}>RESTORE</button
@@ -1207,7 +1325,13 @@
 
                   <!-- Key Management at Bottom -->
                   <div style="margin-top: auto; padding-top: 1.5rem;">
-                    <div class="divider"></div>
+                    <div class="laser-divider"></div>
+                    <p
+                      class="desc"
+                      style="text-align:center; color:#666; margin-bottom:1rem;"
+                    >
+                      Export Private Keys To File
+                    </p>
                     <div class="btn-row">
                       <button
                         class="cyber-btn ghost wide danger"
@@ -2058,33 +2182,121 @@ rpcallowip=127.0.0.1
     class="modal-overlay"
     role="button"
     tabindex="0"
-    on:click|self={() => (showConfirmModal = false)}
-    on:keydown={(e) => e.key === "Escape" && (showConfirmModal = false)}
+    on:click|self={closeModal}
+    on:keydown={(e) => e.key === "Escape" && closeModal()}
   >
-    <div class="modal">
-      <h3 class="modal-title">{confirmTitle}</h3>
+    <div class="modal modal-frame">
+      <h3 class="modal-title neon-text">{modalTitle}</h3>
       <p
         class="modal-text"
-        style="font-size: 0.95rem; line-height: 1.5; color: #ccc;"
+        style="font-size: 1rem; line-height: 1.6; color: #ddd; margin-bottom: 2rem;"
       >
-        {confirmMessage}
+        {modalMessage}
       </p>
       <div
         class="modal-actions"
-        style="justify-content: center; margin-top: 1.5rem; gap: 1rem;"
+        style="justify-content: space-between; gap: 1rem; width: 100%;"
       >
-        <button class="cyber-btn ghost" on:click={handleConfirmNo}>
-          {confirmCancel ? "NO" : "CANCEL"}
+        {#each modalButtons as btn}
+          <button
+            class="cyber-btn {btn.style === 'ghost'
+              ? 'ghost'
+              : ''} {btn.style === 'danger'
+              ? 'danger ghost'
+              : ''} {btn.style === 'primary' ? 'primary-glow' : ''}"
+            style="flex: 1;"
+            on:click={btn.onClick}
+          >
+            {btn.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- ENCRYPTION INPUT MODAL -->
+{#if showEncryptModal}
+  <div class="modal-overlay">
+    <!-- Fixed class name for centering -->
+    <div class="modal-frame">
+      <h3 class="neon-text" style="color:var(--color-primary); margin-top:0;">
+        SET WALLET PASSWORD
+      </h3>
+      <p class="modal-text" style="margin-bottom: 1.5rem; color:#bbb;">
+        <strong>IMPORTANT:</strong> If you lose your password, you will
+        <strong style="color:#ff5555;">LOSE ACCESS</strong>
+        to your funds forever.<br />
+        Save it securely in a safe place!
+      </p>
+
+      <div class="input-group" style="margin-bottom:1rem;">
+        <label for="enc-pass">NEW PASSWORD</label>
+        <input
+          id="enc-pass"
+          type="password"
+          class="input-glass"
+          bind:value={newEncPass}
+          placeholder="Enter Password"
+        />
+      </div>
+
+      <div class="input-group" style="margin-bottom:2rem;">
+        <label for="enc-pass-confirm">CONFIRM PASSWORD</label>
+        <input
+          id="enc-pass-confirm"
+          type="password"
+          class="input-glass"
+          bind:value={newEncPassConfirm}
+          placeholder="Confirm Password"
+        />
+      </div>
+
+      <div class="modal-actions">
+        <button
+          class="cyber-btn primary-glow"
+          on:click={performWalletEncrypt}
+          style="min-height:50px; flex:1;"
+        >
+          ENCRYPT
         </button>
-        <button class="cyber-btn" on:click={handleConfirmYes}>
-          YES, PROCEED
+        <button
+          class="cyber-btn ghost"
+          on:click={() => (showEncryptModal = false)}
+          style="min-height:50px; flex:1;"
+        >
+          CANCEL
         </button>
       </div>
     </div>
   </div>
 {/if}
 
+<!-- PROCESSING OVERLAY -->
+{#if isProcessing}
+  <div class="modal-overlay" style="z-index: 999999;">
+    <div class="modal-frame" style="text-align:center; max-width: 350px;">
+      <div
+        class="spinner"
+        style="margin: 0 auto 1.5rem auto; width: 40px; height: 40px; border: 3px solid rgba(0,255,65,0.1); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite;"
+      ></div>
+      <h3 class="neon-text" style="color:var(--color-primary); margin:0;">
+        PLEASE WAIT
+      </h3>
+      <p style="color:#888; margin-top:0.5rem;">{processingMessage}</p>
+    </div>
+  </div>
+{/if}
+
 <style>
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
   .view-tools {
     display: flex;
     flex-direction: column;
@@ -2103,19 +2315,19 @@ rpcallowip=127.0.0.1
 
   /* --- TOAST --- */
   .toast-popup {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.9);
+    position: fixed;
+    background: rgba(10, 10, 10, 0.95);
     border: 1px solid var(--color-primary);
     padding: 0.8rem 1.2rem;
     border-radius: 6px;
-    z-index: 5000;
+    z-index: 2000000; /* Ensure above all modals */
     max-width: 300px;
-    /* Move to bottom right, away from center/input */
-    top: auto;
-    left: auto;
-    bottom: 80px;
-    right: 20px;
-    transform: none;
+    /* CENTERED POPUP as requested */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    bottom: auto;
+    right: auto;
 
     box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
     font-family: var(--font-mono);
@@ -2331,22 +2543,6 @@ rpcallowip=127.0.0.1
     color: var(--color-muted);
     letter-spacing: 1px;
   }
-  .toggle-row {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-  }
-  .toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    color: #aaa;
-    font-size: 0.75rem;
-    letter-spacing: 0.5px;
-  }
-  .toggle input {
-    accent-color: var(--color-primary);
-  }
   .input-wrapper {
     position: relative;
     width: 100%;
@@ -2457,11 +2653,6 @@ rpcallowip=127.0.0.1
     font-size: 0.75rem;
     color: #888;
     margin: 0;
-  }
-  .divider {
-    height: 1px;
-    background: rgba(255, 255, 255, 0.1);
-    margin: 0.5rem 0;
   }
   .btn-row {
     display: flex;
@@ -2835,6 +3026,54 @@ rpcallowip=127.0.0.1
     padding: 1.5rem;
     background: rgba(0, 0, 0, 0.3);
     justify-content: center;
+  }
+  .modal-actions .cyber-btn {
+    /* Enforce uniform size for modal buttons */
+    min-height: 50px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 1.5rem; /* Remove top/bottom padding reliance */
+    width: 100%; /* If flex:1 is set, this helps fill */
+    margin: 0;
+  }
+
+  /* === NEW CSS FOR v1.3 === */
+  .modal-frame {
+    border: 1px solid var(--color-primary);
+    box-shadow:
+      0 0 20px rgba(0, 255, 65, 0.2),
+      inset 0 0 20px rgba(0, 0, 0, 0.8);
+    background: rgba(10, 15, 12, 0.98);
+    width: min(500px, 90vw); /* Slightly wider for 3 buttons */
+    padding: 2rem;
+    border-radius: 12px; /* USER REQUEST: Rounded Corners */
+  }
+  .neon-text {
+    text-shadow: 0 0 5px var(--color-primary);
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+  }
+  .primary-glow {
+    background: var(--color-primary);
+    color: #000;
+    box-shadow: 0 0 8px var(--color-primary); /* Reduced glow */
+  }
+  .primary-glow:hover {
+    background: #fff;
+    box-shadow: 0 0 15px #fff; /* Reduced hover glow */
+  }
+  .laser-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-primary),
+      transparent
+    );
+    opacity: 0.5;
+    margin: 1rem 0;
+    box-shadow: 0 0 5px var(--color-primary);
   }
 
   /* Binary Status */

@@ -907,13 +907,15 @@
 
   /* --- COMMON PANEL STYLE --- */
   .glass-panel {
-    background: var(--glass-surface);
-    backdrop-filter: var(--glass-blur);
-    border: var(--glass-border);
-    border-top: 1px solid rgba(255, 255, 255, 0.15); /* Sharper top edge highlight */
-    border-bottom: 1px solid rgba(0, 0, 0, 0.6); /* Deeper shadow edge */
-    border-radius: var(--radius-lg);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); /* Richer depth shadow */
+    background: rgba(10, 14, 12, 0.7); /* DARKER */
+    backdrop-filter: blur(15px); /* HEAVIER BLUR */
+    border: 1px solid rgba(0, 255, 65, 0.15); /* NEON BORDER */
+    border-top: 1px solid rgba(0, 255, 65, 0.3); /* HIGHLIGHT */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.8);
+    border-radius: 16px;
+    box-shadow:
+      0 20px 50px rgba(0, 0, 0, 0.7),
+      0 0 20px rgba(0, 255, 65, 0.05); /* GLOW */
     padding: 1.1rem;
     display: flex;
     flex-direction: column;
@@ -1499,11 +1501,13 @@
     left: 50%;
     transform: translate(-50%, -50%);
     width: min(420px, 90vw);
-    background: rgba(6, 12, 10, 0.95);
-    border: 1px solid rgba(0, 255, 65, 0.25);
+    background: rgba(8, 12, 10, 0.98); /* DARKER & OPAQUE */
+    border: 1px solid rgba(0, 255, 65, 0.4); /* NEON BORDER */
     border-radius: 16px;
-    padding: 1.25rem 1.5rem;
-    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+    padding: 1.25rem 1.75rem; /* Slightly more padding */
+    box-shadow:
+      0 0 50px rgba(0, 255, 65, 0.15),
+      /* OUTER GLOW */ 0 30px 80px rgba(0, 0, 0, 0.9); /* DEPTH SHADOW */
     z-index: 101;
   }
   .modal-title {
