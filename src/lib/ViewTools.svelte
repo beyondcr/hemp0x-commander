@@ -1303,14 +1303,18 @@
                   <span class="card-title">WALLET MANAGEMENT</span>
                 </header>
                 <div class="card-body">
-                  <p class="desc">Safeguard your wallet.dat file.</p>
+                  <p class="desc" style="text-align: center;">
+                    SAFEGUARD YOUR WALLET.DAT FILE
+                  </p>
                   <button class="cyber-btn wide" on:click={backupWallet}>
                     [ BACKUP WALLET.DAT ]
                   </button>
 
                   <div class="laser-divider"></div>
 
-                  <p class="desc">Restore wallet from file.</p>
+                  <p class="desc" style="text-align: center;">
+                    RESTORE OR CREATE WALLET FROM FILE
+                  </p>
 
                   <div class="btn-row" style="gap: 1rem;">
                     <button
@@ -1330,7 +1334,7 @@
                       class="desc"
                       style="text-align:center; color:#666; margin-bottom:1rem;"
                     >
-                      Export Private Keys To File
+                      EXPORT OR IMPORT PRIVATE KEYS
                     </p>
                     <div class="btn-row">
                       <button

@@ -88,6 +88,38 @@
             status = "Node offline - Start node to load addresses";
         }
     }
+
+    // --- SORTING ---
+    let sortColumn = "label"; // 'label', 'address', 'balance'
+    let sortDirection = "asc"; // 'asc', 'desc'
+
+    function toggleSort(col) {
+        if (sortColumn === col) {
+            sortDirection = sortDirection === "asc" ? "desc" : "asc";
+        } else {
+            sortColumn = col;
+            sortDirection = "asc";
+        }
+    }
+
+    $: sortedAddresses = [...addresses].sort((a, b) => {
+        let valA = a[sortColumn];
+        let valB = b[sortColumn];
+
+        if (sortColumn === "balance") {
+            // Handle numeric balance sorting
+            valA = Number(valA || 0);
+            valB = Number(valB || 0);
+        } else {
+            // Handle text sorting
+            valA = (valA || "").toString().toLowerCase();
+            valB = (valB || "").toString().toLowerCase();
+        }
+
+        if (valA < valB) return sortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return sortDirection === "asc" ? 1 : -1;
+        return 0;
+    });
 </script>
 
 <div class="view-receive">
@@ -168,13 +200,31 @@
 
         <!-- TECH HEADER -->
         <div class="header-row addr-grid-header">
-            <span>LABEL</span>
+            <span
+                class="sortable"
+                class:active={sortColumn === "label"}
+                on:click={() => toggleSort("label")}
+                role="button"
+                tabindex="0"
+                on:keydown={(e) => e.key === "Enter" && toggleSort("label")}
+            >
+                LABEL
+            </span>
             <span>ADDRESS</span>
-            <span class="right">BALANCE</span>
+            <span
+                class="right sortable"
+                class:active={sortColumn === "balance"}
+                on:click={() => toggleSort("balance")}
+                role="button"
+                tabindex="0"
+                on:keydown={(e) => e.key === "Enter" && toggleSort("balance")}
+            >
+                BALANCE
+            </span>
         </div>
 
         <div class="scroll-body">
-            {#each addresses as item, i}
+            {#each sortedAddresses as item, i}
                 <div
                     class="data-row addr-row"
                     role="button"
@@ -415,6 +465,17 @@
         font-size: 0.7rem;
         font-weight: bold;
         letter-spacing: 1px;
+    }
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+        transition: color 0.2s;
+    }
+    .sortable:hover {
+        color: #fff;
+    }
+    .sortable.active {
+        color: var(--color-primary);
     }
     .scroll-body {
         flex: 1;

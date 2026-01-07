@@ -16,6 +16,11 @@ All notable changes to Hemp0x Commander are documented here.
   - Center-aligned all modals and popups.
   - Added "Processing..." blocking overlay with spinner for long-running tasks.
   - Fixed "Passwords do not match" toast z-index (now visible).
+- **Address Sorting:**
+  - Added sorting (Label/Balance) to Receive page addresses.
+  - Interactive headers toggle ascending/descending order.
+- **Wallet Tab Polish:**
+  - Renamed and centered headers for clearer "Restore/Create" and "Export/Import" sections.
 
 ### New Stuff
 - **Network Tab** - New sub-tab under Tools for network diagnostics and peer management
