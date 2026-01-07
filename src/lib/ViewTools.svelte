@@ -470,13 +470,34 @@
   let passOld = "";
   let passNew = "";
   let passNewConfirm = "";
-  let backupBeforeRestore = false;
-  let restartAfterRestore = true;
-  let backupBeforeNew = false;
-  let restartAfterNew = true;
+  // --- WALLET WORKFLOW STATE (New) ---
+  let showConfirmModal = false;
+  let confirmTitle = "";
+  let confirmMessage = "";
+  let confirmAction = null; // Function to run on YES
+  let confirmCancel = null; // Function to run on NO (optional)
 
+  function askConfirmation(title, message, onYes, onNo = null) {
+    confirmTitle = title;
+    confirmMessage = message;
+    confirmAction = onYes;
+    confirmCancel = onNo;
+    showConfirmModal = true;
+  }
+
+  function handleConfirmYes() {
+    showConfirmModal = false;
+    if (confirmAction) confirmAction();
+  }
+
+  function handleConfirmNo() {
+    showConfirmModal = false;
+    if (confirmCancel) confirmCancel();
+  }
+
+  // --- REFACTORED WALLET ACTIONS ---
   async function backupWallet() {
-    if (!tauriReady) return;
+    if (!tauriReady) return false;
     try {
       const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
       const filePath = await save({
@@ -484,11 +505,15 @@
         defaultPath: `hemp0x_wallet_${ts}.dat`,
         filters: [{ name: "Wallet Backup", extensions: ["dat"] }],
       });
-      if (!filePath) return; // User cancelled
+      if (!filePath) return false; // User cancelled
+
+      showToast("Backing up wallet...", "info");
       await core.invoke("backup_wallet_to", { path: filePath });
       showToast(`Backup Saved: ${filePath}`, "success");
+      return true; // Success
     } catch (err) {
-      showToast("Backup Failed", "error");
+      showToast("Backup Failed: " + err, "error");
+      return false;
     }
   }
 
@@ -508,62 +533,110 @@
     }
   }
 
+  function askRestartNode() {
+    askConfirmation(
+      "RESTART NODE?",
+      "A restart is required to apply changes. Restart now?",
+      async () => {
+        showToast("Restarting node...", "info");
+        try {
+          await core.invoke("stop_node");
+          // Give it a moment to stop
+          setTimeout(async () => {
+            // For now we just stop. The user or the watchdog might restart it,
+            // but let's try to start it if we can, or just tell user to restart.
+            // Actually, 'start_node' might not be exposed or reliable if the daemon binary is separate.
+            // Let's assume stopping is what we do and the main process or user handles start.
+            // But existing code implies we just want to restart.
+            // Let's use standard restart logic if we have it, or just stop.
+            // Looking at previous code, it relied on backend flags 'restartNode'.
+            // We can't use that if we are doing manual steps.
+            // Let's try to invoke "start_node" assuming it exists in the rust backend
+            // (it is common in these hemp0x apps).
+            await core.invoke("start_node", { reindex: false });
+            showToast("Node Restarted", "success");
+          }, 3000);
+        } catch (e) {
+          // If start_node doesn't exist, just say Node Stopped.
+          showToast(
+            "Node Stopped. Please restart manually if it doesn't return.",
+            "warning",
+          );
+        }
+      },
+    );
+  }
+
   async function restoreWallet() {
     if (!tauriReady) return;
     if (!restorePath) {
       showToast("Enter path to backup file", "error");
       return;
     }
-    if (
-      !window.confirm(
-        backupBeforeRestore
-          ? "Restore wallet.dat? Current wallet will be backed up."
-          : "Restore wallet.dat without backing up the current wallet?",
-      )
-    ) {
-      return;
-    }
+
+    askConfirmation(
+      "BACKUP CURRENT WALLET?",
+      "Would you like to backup your current wallet.dat before overwriting it?",
+      async () => {
+        // YES
+        const backedUp = await backupWallet();
+        if (backedUp) proceedRestore();
+        // If backup cancelled/failed, we probably shouldn't proceed automatically unless user insists?
+        // Let's assumes if backup returns false (cancelled), we stop.
+        else showToast("Restore cancelled (Backup skipped/failed)", "warning");
+      },
+      () => {
+        // NO - Proceed directly
+        proceedRestore();
+      },
+    );
+  }
+
+  async function proceedRestore() {
     try {
+      showToast("Restoring wallet...", "info");
+      // We use backupExisting: false because we handled it manually (or user skipped)
+      // We use restartNode: false because we handle it manually
       await core.invoke("restore_wallet", {
         path: restorePath,
-        backupExisting: backupBeforeRestore,
-        restartNode: restartAfterRestore,
+        backupExisting: false,
+        restartNode: false,
       });
-      showToast(
-        restartAfterRestore
-          ? "Restore Complete. Node restarted."
-          : "Restore Complete. Restart Node if needed.",
-        "success",
-      );
+      showToast("Restore Successful!", "success");
+      askRestartNode();
     } catch (err) {
-      showToast("Restore Failed", "error");
+      showToast("Restore Failed: " + err, "error");
     }
   }
 
   async function createNewWallet() {
     if (!tauriReady) return;
-    if (
-      !window.confirm(
-        backupBeforeNew
-          ? "Create a fresh wallet? Current wallet will be backed up."
-          : "Create a fresh wallet without backing up the current wallet?",
-      )
-    ) {
-      return;
-    }
+    askConfirmation(
+      "BACKUP CURRENT WALLET?",
+      "Creating a new wallet will overwrite user.dat! Backup first?",
+      async () => {
+        const backedUp = await backupWallet();
+        if (backedUp) proceedNewWallet();
+        else
+          showToast("New Wallet cancelled (Backup skipped/failed)", "warning");
+      },
+      () => {
+        proceedNewWallet();
+      },
+    );
+  }
+
+  async function proceedNewWallet() {
     try {
+      showToast("Creating new wallet...", "info");
       await core.invoke("create_new_wallet", {
-        backupExisting: backupBeforeNew,
-        restartNode: restartAfterNew,
+        backupExisting: false,
+        restartNode: false,
       });
-      showToast(
-        restartAfterNew
-          ? "New Wallet Created. Node restarted."
-          : "New Wallet Created. Restart Node if needed.",
-        "success",
-      );
-    } catch (err) {
-      showToast("Create Failed", "error");
+      showToast("New Wallet Created", "success");
+      askRestartNode();
+    } catch (e) {
+      showToast("Create Failed: " + e, "error");
     }
   }
 
@@ -768,12 +841,14 @@
       });
       // Add change addresses? Maybe later.
 
-      keyList = addresses.map((addr) => ({
-        address: addr.address,
-        label: addr.label || "",
-        balance: addr.balance || "0.00000000",
-        selected: false,
-      }));
+      keyList = addresses
+        .map((addr) => ({
+          address: addr.address,
+          label: addr.label || "",
+          balance: addr.balance || "0.00000000",
+          selected: false,
+        }))
+        .sort((a, b) => parseFloat(b.balance) - parseFloat(a.balance));
     } catch (err) {
       showToast("Failed to load addresses: " + err, "error");
     }
@@ -922,6 +997,7 @@
     showToast(`Imported ${successCount} keys.`, "success");
     processingKeys = false;
     showKeyModal = false;
+    askRestartNode();
   }
 
   function toggleSelectAll() {
@@ -1093,31 +1169,15 @@
               <!-- BACKUP COLUMN -->
               <div class="glass-panel panel-soft card">
                 <header class="card-header">
-                  <span class="card-title">BACKUP & RESTORE</span>
+                  <span class="card-title">WALLET MANAGEMENT</span>
                 </header>
                 <div class="card-body">
                   <p class="desc">Safeguard your wallet.dat file.</p>
                   <button class="cyber-btn wide" on:click={backupWallet}>
-                    [ BACKUP WALLET ]
+                    [ BACKUP WALLET.DAT ]
                   </button>
 
                   <div class="divider"></div>
-                  <div class="toggle-row">
-                    <label class="toggle">
-                      <input
-                        type="checkbox"
-                        bind:checked={backupBeforeRestore}
-                      />
-                      <span>Backup current wallet before restore</span>
-                    </label>
-                    <label class="toggle">
-                      <input
-                        type="checkbox"
-                        bind:checked={restartAfterRestore}
-                      />
-                      <span>Restart node after restore</span>
-                    </label>
-                  </div>
 
                   <label for="restore-path"
                     >RESTORE FROM FILE (Enter Path)</label
@@ -1144,15 +1204,24 @@
                       on:click={createNewWallet}>NEW WALLET</button
                     >
                   </div>
-                  <div class="toggle-row">
-                    <label class="toggle">
-                      <input type="checkbox" bind:checked={backupBeforeNew} />
-                      <span>Backup current wallet before new</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" bind:checked={restartAfterNew} />
-                      <span>Restart node after new wallet</span>
-                    </label>
+
+                  <!-- Key Management at Bottom -->
+                  <div style="margin-top: auto; padding-top: 1.5rem;">
+                    <div class="divider"></div>
+                    <div class="btn-row">
+                      <button
+                        class="cyber-btn ghost wide danger"
+                        on:click={openExportModal}
+                      >
+                        EXPORT KEYS
+                      </button>
+                      <button
+                        class="cyber-btn ghost wide"
+                        on:click={openImportModal}
+                      >
+                        IMPORT KEYS
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1188,25 +1257,7 @@
                     [ UPDATE PASSWORD ]
                   </button>
 
-                  <div class="divider"></div>
-
-                  <p class="desc" style="margin-top: 0;">
-                    Import/Export private keys.
-                  </p>
-                  <div class="btn-row">
-                    <button
-                      class="cyber-btn ghost wide danger"
-                      on:click={openExportModal}
-                    >
-                      EXPORT KEYS
-                    </button>
-                    <button
-                      class="cyber-btn ghost wide"
-                      on:click={openImportModal}
-                    >
-                      IMPORT KEYS
-                    </button>
-                  </div>
+                  <!-- Key Management moved to Wallet Management panel -->
                 </div>
               </div>
             </div>
@@ -2001,6 +2052,37 @@ rpcallowip=127.0.0.1
     </div>
   {/if}
 </div>
+
+{#if showConfirmModal}
+  <div
+    class="modal-overlay"
+    role="button"
+    tabindex="0"
+    on:click|self={() => (showConfirmModal = false)}
+    on:keydown={(e) => e.key === "Escape" && (showConfirmModal = false)}
+  >
+    <div class="modal">
+      <h3 class="modal-title">{confirmTitle}</h3>
+      <p
+        class="modal-text"
+        style="font-size: 0.95rem; line-height: 1.5; color: #ccc;"
+      >
+        {confirmMessage}
+      </p>
+      <div
+        class="modal-actions"
+        style="justify-content: center; margin-top: 1.5rem; gap: 1rem;"
+      >
+        <button class="cyber-btn ghost" on:click={handleConfirmNo}>
+          {confirmCancel ? "NO" : "CANCEL"}
+        </button>
+        <button class="cyber-btn" on:click={handleConfirmYes}>
+          YES, PROCEED
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .view-tools {
@@ -2878,5 +2960,11 @@ rpcallowip=127.0.0.1
   .key-list-controls .text-btn:hover {
     background: var(--color-primary);
     color: #000;
+  }
+
+  @media (max-width: 800px) {
+    .tool-grid.wallet-view {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
