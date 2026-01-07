@@ -295,7 +295,7 @@
   }
 
   // ============ UPDATE TAB ============
-  const APP_VERSION = "v1.2";
+  const APP_VERSION = "v1.3";
   // TODO: Replace with official update server or Load Balancer
   const UPDATE_SERVER = "https://updates.hemp0x.com/";
 

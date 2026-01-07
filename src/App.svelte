@@ -341,7 +341,7 @@
       <img src={logoNew} alt="Hemp0x" class="logo" />
       <div class="brand-info">
         <h1 class="app-title">
-          HEMP0X COMMANDER <span class="version">v1.2</span>
+          HEMP0X COMMANDER <span class="version">v1.3</span>
         </h1>
         <div class="app-status">SECURE SESSION - {sessionStamp}</div>
       </div>
@@ -576,7 +576,7 @@
           <img src={logoNew} alt="Hemp0x Logo" class="about-logo" />
           <div class="about-title-block">
             <h1 class="about-title">HEMP0X COMMANDER</h1>
-            <span class="about-version">v1.2</span>
+            <span class="about-version">v1.3</span>
           </div>
           <label class="welcome-toggle">
             <input
@@ -720,7 +720,7 @@
       <div class="welcome-modal">
         <div class="welcome-header">
           <h2>Welcome To Hemp0x Commander</h2>
-          <span class="welcome-version">v1.2</span>
+          <span class="welcome-version">v1.3</span>
         </div>
         <div class="welcome-body">
           <p class="welcome-text">
