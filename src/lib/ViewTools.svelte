@@ -470,8 +470,7 @@
   let passOld = "";
   let passNew = "";
   let passNewConfirm = "";
-  // --- WALLET WORKFLOW STATE (New) ---
-  // --- WALLET WORKFLOW STATE (Refined) ---
+  // Wallet Workflow State
   let showConfirmModal = false;
   let modalTitle = "";
   let modalMessage = "";
@@ -511,22 +510,6 @@
     } catch (err) {
       showToast("Backup Failed: " + err, "error");
       return false;
-    }
-  }
-
-  async function browseRestore() {
-    if (!tauriReady) return;
-    try {
-      const selected = await open({
-        title: "Select Wallet Backup",
-        multiple: false,
-        filters: [{ name: "Wallet Files", extensions: ["dat", "bak"] }],
-      });
-      if (selected) {
-        restorePath = selected;
-      }
-    } catch (err) {
-      showToast("Browse failed", "error");
     }
   }
 
@@ -738,7 +721,11 @@
 
       isProcessing = false;
 
-      // USER REQUEST: Manual Start Popup
+      // Clear sensitive password fields
+      newEncPass = "";
+      newEncPassConfirm = "";
+
+      // Node stopped during encryption; user must restart manually.
       openModal(
         "ENCRYPTION COMPLETE",
         "Your wallet is now encrypted. The node has been stopped for security.\n\nPlease start the node manually from the System tab or restart the app.",
@@ -1203,6 +1190,7 @@
   });
 
   onDestroy(() => {
+    clearTimeout(toastTimer);
     if (autoBanIntervalId) {
       clearInterval(autoBanIntervalId);
     }

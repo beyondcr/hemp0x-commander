@@ -22,6 +22,12 @@ All notable changes to Hemp0x Commander are documented here.
 - **Wallet Tab Polish:**
   - Renamed and centered headers for clearer "Restore/Create" and "Export/Import" sections.
 
+### Performance & Cleanup
+- Removed unused `browseRestore()` function (dead code from old workflow).
+- Added `toastTimer` cleanup on component destroy (prevents memory leaks).
+- Password fields cleared after successful encryption (security hygiene).
+- Consolidated duplicate comments and removed AI-generated markers.
+
 ### New Stuff
 - **Network Tab** - New sub-tab under Tools for network diagnostics and peer management
 - **Peer Protection** - Auto-bans nodes running outdated versions (<4.7.0) every 2 minutes
