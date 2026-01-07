@@ -106,6 +106,12 @@
   let walletPromptPassConfirm = "";
   let walletPromptDuration = "60";
   let walletPromptError = "";
+  // --- DASHBOARD OVERHAUL ---
+  let isActivityExpanded = false;
+
+  function toggleActivityExpand() {
+    isActivityExpanded = !isActivityExpanded;
+  }
 
   function isActive(tab) {
     return activeTab === tab;
@@ -282,6 +288,8 @@
     };
     updateScale();
     window.addEventListener("resize", updateScale);
+
+    let unlistenNetwork;
     if (tauriReady) {
       core.invoke("init_config");
       // Load Network Mode
@@ -296,10 +304,11 @@
 
       // Listen for runtime changes
       listen("network-changed", (event) => {
-        console.log("Network changed event received:", event);
         if (event.payload && event.payload.mode) {
           networkMode = event.payload.mode;
         }
+      }).then((fn) => {
+        unlistenNetwork = fn;
       });
     }
     checkWelcomePopup(); // Show welcome popup if enabled
@@ -320,6 +329,7 @@
     return () => {
       clearTimeout(timer);
       window.removeEventListener("resize", updateScale);
+      if (typeof unlistenNetwork === "function") unlistenNetwork();
     };
   });
 </script>
@@ -380,7 +390,7 @@
   </header>
 
   <!-- CONTENT AREA -->
-  <div class="content">
+  <div class="content" class:no-padding={activeTab === "TOOLS"}>
     <!-- DASHBOARD VIEW -->
     <!-- DASHBOARD VIEW -->
     <div class="view-wrapper" class:show={activeTab === "DASHBOARD"}>
@@ -441,13 +451,16 @@
               </div>
               <div
                 class="status-chip"
-                class:locked={walletInfo.status === "LOCKED"}
+                class:status-red={walletInfo.status === "UNENCRYPTED"}
+                class:status-green={walletInfo.status !== "UNENCRYPTED" &&
+                  walletInfo.status !== "--"}
               >
                 {walletInfo.status}
               </div>
             </header>
 
-            <div class="panel-content wallet-content">
+            <div class="panel-content wallet-content compact-wallet">
+              <!-- Added compact-wallet class -->
               <div class="balance-hero-small">
                 <div class="val neon-glow" class:blurred={hideBalance}>
                   {hideBalance ? "******" : walletInfo.balance}
@@ -476,7 +489,10 @@
 
         <!-- BOTTOM ROW: ACTIVITY -->
         <div class="row-bottom">
-          <div class="glass-panel activity-card cyber-panel">
+          <div
+            class="glass-panel activity-card cyber-panel"
+            class:expanded={isActivityExpanded}
+          >
             <header class="panel-header">
               <div class="header-left">
                 <span class="hud-title mono">[ RECENT ACTIVITY ]</span>
@@ -486,6 +502,16 @@
                   on:click={toggleHideActivity}
                 >
                   <img src={hideActivity ? eyeClosed : eyeOpen} alt="toggle" />
+                </button>
+                <button
+                  class="btn-eye btn-expand"
+                  title={isActivityExpanded ? "Collapse" : "Expand Full Screen"}
+                  on:click={toggleActivityExpand}
+                >
+                  <!-- Simple ^ chevron or box icon -->
+                  <span class="expand-icon"
+                    >{isActivityExpanded ? "▼" : "▲"}</span
+                  >
                 </button>
               </div>
               <span class="hint mono">LAST 50 TRANSACTIONS</span>
@@ -575,7 +601,8 @@
           </p>
           <p class="about-credit">
             Forked from Raven Coin (12-18-25)<br />
-            Special thanks to: <strong>cc2002cc</strong>
+            Special thanks to: <strong>cc2002cc</strong> and the Ravencoin community
+            for making this all possible
           </p>
         </div>
 
@@ -733,10 +760,12 @@
     width: 100vw;
     position: relative;
     background: #000; /* PURE VOID */
-    transform: scale(var(--ui-scale, 1));
-    transform-origin: top left;
-    width: calc(100% / var(--ui-scale, 1));
-    height: calc(100% / var(--ui-scale, 1));
+    /* REMOVED FIXED SCALING - Allow Responsive Layout */
+    /* transform: scale(var(--ui-scale, 1)); */
+    /* transform-origin: top left; */
+    /* width: calc(100% / var(--ui-scale, 1)); */
+    /* height: calc(100% / var(--ui-scale, 1)); */
+    overflow: hidden;
   }
 
   /* --- HEADER --- */
@@ -780,11 +809,13 @@
     text-shadow: none;
   }
   .app-status {
-    font-size: 0.7rem;
     color: var(--color-primary-dim);
     letter-spacing: 1px;
     margin-top: 4px;
     text-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+    white-space: nowrap; /* Prevent wrap */
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* Status Traffic Light Dots */
@@ -860,26 +891,6 @@
     display: flex;
     gap: 8px;
   }
-  .dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    opacity: 0.4;
-    transition: opacity 0.2s;
-  }
-  .dot:hover {
-    opacity: 1;
-    filter: drop-shadow(0 0 4px white);
-  }
-  .dot.red {
-    background: #ff5f56;
-  }
-  .dot.yellow {
-    background: #ffbd2e;
-  }
-  .dot.green {
-    background: #27c93f;
-  }
 
   /* --- CONTENT CONTAINER --- */
   .content {
@@ -889,6 +900,9 @@
     padding: 0.8rem 1.5rem 1.5rem 1.5rem;
     display: flex;
     flex-direction: column;
+  }
+  .content.no-padding {
+    padding-bottom: 0;
   }
 
   /* --- COMMON PANEL STYLE --- */
@@ -971,14 +985,19 @@
     gap: 1.2rem;
     height: 100%; /* Ensure it takes full height */
     min-height: 0;
+    overflow: hidden; /* Prevent global scroll */
+    padding-right: 4px; /* Space for scrollbar */
     animation: viewFadeIn 0.25s ease-out forwards;
   }
 
   .row-top {
-    flex: 0 0 auto; /* Fixed height for top widgets */
+    flex: 0 0 auto; /* Allow flexible height */
     display: flex;
     gap: 1.2rem;
-    height: 250px; /* Increased to show START/STOP buttons */
+    /* height: 30vh;  Removed restrictive height */
+    /* max-height: 210px; Removed restrictive cap */
+    min-height: 130px; /* ULTRA COMPACT (was 160px) */
+    transition: height 0.2s;
   }
   .row-bottom {
     flex: 1; /* GROWS to take remaining space */
@@ -989,9 +1008,49 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 330px; /* Fixed minimum height - increased */
-    max-height: 390px; /* Lock maximum height - increased */
+    min-height: 0; /* Allow shrinking to viewport */
+    /* max-height: 390px; REMOVED CAP for growth */
     overflow: hidden; /* Container doesn't overflow */
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); /* PRO TRANSITION */
+  }
+
+  /* --- ACTIVITY EXPANSION OVERLAY --- */
+  /* --- ACTIVITY EXPANSION OVERLAY --- */
+  .activity-card.expanded {
+    position: fixed; /* Break out of grid */
+    top: 0; /* Cover EVERYTHING including header */
+    left: 0;
+    right: 0; /* Use right: 0 instead of width: 100vw to avoid scrollbar overflow */
+    bottom: 0;
+    z-index: 9999; /* Ensure top of stack */
+    margin: 0.5rem; /* Tiny margin to show rounded corners against edge */
+    border-radius: 12px; /* RADIUS ADDED */
+    border: none;
+    background: rgba(0, 0, 0, 0.85); /* Semi-transparent for blur */
+    backdrop-filter: blur(20px); /* GLASS EFFECT */
+    padding: 1.5rem; /* Better framing */
+    box-sizing: border-box; /* SAFETY: Include padding/border in width */
+    border: 1px solid rgba(0, 255, 65, 0.3); /* GREEN BORDER */
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.8); /* Deep shadow for float effect */
+  }
+  .activity-card.expanded .panel-header {
+    background: transparent;
+    border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+    padding-right: 2rem; /* FIX CUTOFF TEXT */
+  }
+
+  .btn-expand {
+    margin-left: 8px;
+    color: var(--color-primary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .expand-icon {
+    font-family: Arial, sans-serif; /* simpler font for arrow */
+    font-size: 0.7rem;
   }
 
   /* --- CYBER PANELS (The Hybrid) --- */
@@ -1066,7 +1125,8 @@
     align-items: center;
     padding: 0.8rem 1.2rem;
     background: rgba(0, 0, 0, 0.4);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05); /* Removed flex-shrink: 0, it is default in flex items but can be explicit for safety */
+    flex-shrink: 0; /* SAFEMODE: HEADER ALWAYS VISIBLE */
   }
   .hud-title {
     color: var(--color-muted);
@@ -1136,10 +1196,18 @@
   /* PANEL CONTENT */
   .panel-content {
     flex: 1;
-    padding: 1.2rem;
+    padding: 0.5rem 1rem; /* ULTRA COMPACT PADDING (was 0.8rem) */
     position: relative;
     display: flex;
     flex-direction: column;
+    justify-content: center; /* Center content vertically */
+    /* padding-bottom removed, rely on flex gap */
+  }
+
+  /* COMPACT WALLET TWEAK */
+  .compact-wallet .balance-hero-small .val {
+    font-size: 2.5rem; /* Slightly smaller if needed, but flex gap handles it */
+    margin-bottom: -4px; /* Tighten line height gap */
   }
 
   /* PERSISTENT VIEWS */
@@ -1220,7 +1288,7 @@
   .stat-grid-compact {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.5rem; /* TIGHT STATS GAP (was 1rem) */
     justify-content: center;
     height: 100%;
   }
@@ -1243,11 +1311,12 @@
 
   /* --- WALLET HERO SMALL --- */
   .balance-hero-small .val {
-    font-size: 2.5rem;
+    font-size: 1.8rem; /* ULTRA COMPACT (was 2.5rem) */
     font-weight: 700;
     font-family: var(--font-mono);
     color: #fff;
     line-height: 1;
+    margin-bottom: -2px; /* Tighten Gap */
   }
   .balance-hero-small .unit {
     font-size: 1rem;
@@ -1256,8 +1325,9 @@
   .balance-hero-small .sub {
     font-size: 0.65rem;
     color: var(--color-muted);
+    color: var(--color-muted);
     letter-spacing: 2px;
-    margin-top: 0.5rem;
+    margin-top: 0.2rem; /* TIGHT MARGIN */
   }
   .wallet-metrics {
     display: flex;
@@ -1327,10 +1397,19 @@
     border-radius: 4px;
     border: 1px solid var(--color-primary);
     color: var(--color-primary);
+    transition: all 0.3s ease;
   }
-  .status-chip.locked {
-    border-color: #ff5555;
-    color: #ff5555;
+  .status-chip.status-red {
+    color: #ff4444;
+    border-color: rgba(255, 68, 68, 0.5);
+    background: rgba(255, 68, 68, 0.1);
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.2);
+  }
+  .status-chip.status-green {
+    color: #00ff41;
+    border-color: rgba(0, 255, 65, 0.5);
+    background: rgba(0, 255, 65, 0.1);
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
   }
 
   /* --- BUTTONS --- */
@@ -1623,11 +1702,15 @@
 
   /* --- ABOUT PAGE --- */
   .about-page {
-    height: 100%;
+    flex: 1; /* KEY FIX: Fill available space */
+    height: 100%; /* Ensure full height logic applies */
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
+    overflow-y: auto; /* Internal scroll ONLY */
     padding: 1.5rem;
+    padding-bottom: 5rem; /* KEY FIX: Extra padding to prevent border cutoff */
+    margin: 4px; /* KEY FIX: Pull in from edges to show border/shadow */
+    min-height: 0; /* Allow shrinking */
   }
   .about-header {
     display: flex;
@@ -1758,5 +1841,81 @@
   .about-link:hover {
     opacity: 0.8;
     text-decoration: underline;
+  }
+  /* --- HEADER RESPONSIVENESS --- */
+  .status-stack {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0; /* KEY FIX: Never crush lights */
+  }
+
+  @media (max-width: 800px) {
+    .app-title {
+      font-size: 0.9rem;
+    }
+    .version {
+      display: none;
+    }
+    .brand-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    /* Responsive Activity Grid */
+    .header-row,
+    .data-row {
+      grid-template-columns: 90px 80px 120px 60px 1fr;
+      font-size: 0.8rem;
+      padding: 0.5rem 0.8rem;
+    }
+    .row-top {
+      flex-direction: column;
+      gap: 0.8rem;
+      min-height: auto;
+    }
+    .node-card,
+    .wallet-card {
+      flex: none;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .header-row,
+    .data-row {
+      grid-template-columns: 70px 70px 100px 50px 1fr;
+      font-size: 0.7rem;
+      padding: 0.4rem 0.6rem;
+    }
+    .tab-btn {
+      padding: 0.5rem 0.6rem;
+      font-size: 0.7rem;
+    }
+    .logo {
+      height: 32px;
+      width: 32px;
+    }
+  }
+
+  @media (max-height: 700px) {
+    .top-bar {
+      height: 60px;
+      padding: 0 1rem;
+    }
+    .row-top {
+      min-height: 100px;
+    }
+    .panel-header {
+      padding: 0.5rem 0.8rem;
+    }
+    .panel-content {
+      padding: 0.3rem 0.8rem;
+    }
+    .stat-pair {
+      padding-bottom: 0.3rem;
+    }
+    .balance-hero-small .val {
+      font-size: 1.5rem;
+    }
   }
 </style>

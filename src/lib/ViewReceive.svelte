@@ -8,6 +8,7 @@
     let status = "";
     let tauriReady = false;
     let showChange = false;
+    let isExpanded = false; // EXPANSION STATE
     export let isNodeOnline = false; // Received from App.svelte
 
     async function refreshList() {
@@ -61,6 +62,10 @@
         } catch {
             status = "Copy failed.";
         }
+    }
+
+    function toggleExpand() {
+        isExpanded = !isExpanded;
     }
 
     onMount(() => {
@@ -143,9 +148,21 @@
     </div>
 
     <!-- BOTTOM: LIST -->
-    <div class="glass-panel panel-strong list-area cyber-panel">
+    <div
+        class="glass-panel panel-strong list-area cyber-panel"
+        class:expanded={isExpanded}
+    >
         <header class="panel-header">
-            <span class="hud-title mono">[ ADDRESS BOOK ]</span>
+            <div class="header-left">
+                <span class="hud-title mono">[ MY ADDRESSES ]</span>
+                <button
+                    class="btn-expand"
+                    title={isExpanded ? "Collapse" : "Expand Full Screen"}
+                    on:click={toggleExpand}
+                >
+                    <span class="expand-icon">{isExpanded ? "▼" : "▲"}</span>
+                </button>
+            </div>
             <span class="hint mono">CLICK TO COPY</span>
         </header>
 
@@ -209,9 +226,27 @@
     }
     .list-area {
         flex: 1;
-        min-height: 230px; /* Fixed min-height - prevents collapse when disconnected */
+        min-height: 0; /* KEY FIX: Allow shrinking to fit window */
         display: flex;
         flex-direction: column;
+        transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); /* PRO TRANSITION */
+    }
+
+    .list-area.expanded {
+        position: fixed;
+        inset: 0.5rem; /* Floating margin */
+        z-index: 9999;
+        margin: 0;
+        border-radius: 12px;
+        background: rgba(8, 12, 10, 0.95);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(0, 255, 65, 0.3);
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        padding: 1.5rem;
+        box-sizing: border-box;
+    }
+    .list-area.expanded .scroll-body {
+        min-height: 0; /* Ensure internal scrolling works */
     }
 
     /* --- CYBER PANEL --- */
@@ -220,7 +255,7 @@
         border: 1px solid rgba(0, 255, 65, 0.2);
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
         position: relative;
-        overflow: hidden;
+        overflow: hidden; /* Ensure content is clipped */
         display: flex;
         flex-direction: column;
     }
@@ -245,10 +280,23 @@
 
     /* --- GENERATE BODY --- */
     .gen-body {
-        padding: 1.2rem; /* Compacted from 1.5rem */
+        padding: 1.2rem;
         display: flex;
         flex-direction: column;
-        gap: 0.8rem; /* Compacted from 1rem */
+        gap: 0.8rem;
+    }
+
+    @media (max-height: 700px) {
+        .gen-body {
+            padding: 0.8rem 1rem;
+            gap: 0.6rem;
+        }
+        .panel-header {
+            padding: 0.5rem 1rem;
+        }
+        .input-glass {
+            padding: 0.5rem;
+        }
     }
     .field-label {
         font-size: 0.7rem;
@@ -446,5 +494,21 @@
     .scroll-body::-webkit-scrollbar-thumb {
         background: rgba(0, 255, 65, 0.3);
         border-radius: 0;
+    }
+    .btn-expand {
+        background: none;
+        border: none;
+        color: var(--color-primary);
+        font-size: 0.8rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 1rem;
+        padding: 0;
+    }
+    .header-left {
+        display: flex;
+        align-items: center;
     }
 </style>

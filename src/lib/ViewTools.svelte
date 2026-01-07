@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { fly, fade } from "svelte/transition";
   import { core } from "@tauri-apps/api";
   import { emit } from "@tauri-apps/api/event";
@@ -386,7 +386,6 @@
     }
 
     isCheckingUpdate = false;
-    isCheckingUpdate = false;
   }
 
   async function extractBinaries() {
@@ -597,6 +596,345 @@
   let showNetworkModal = false;
   let pendingNetworkMode = "";
 
+  // Network Tools State
+  // (netInfo removed)
+  // Ban List State
+  let banList = [];
+  let banListLoading = false;
+  let banResult = null;
+  let banningInProgress = false;
+  let autoBanInterval = 120 * 1000; // Check every 120 secs (User Requested)
+
+  async function loadBanList() {
+    if (!tauriReady) return;
+    banListLoading = true;
+    try {
+      const res = await core.invoke("get_ban_list");
+      banList = res;
+    } catch (e) {
+      console.error(e);
+    }
+    banListLoading = false;
+  }
+
+  async function banOldPeers(silent = false) {
+    if (!tauriReady) return;
+    banningInProgress = true;
+    try {
+      const res = await core.invoke("ban_old_peers");
+      banResult = res;
+      if (!silent && res.banned_count > 0) {
+        showToast(`Banned ${res.banned_count} old peers`, "success");
+        loadBanList();
+      } else if (!silent) {
+        showToast("No new invalid or outdated peers found", "success");
+      }
+    } catch (e) {
+      if (!silent) showToast("Peer check failed", "error");
+    }
+    banningInProgress = false;
+  }
+
+  async function unbanPeer(address) {
+    if (!confirm(`Unban ${address}?`)) return;
+    try {
+      await core.invoke("unban_peer", { address });
+      showToast(`Unbanned ${address}`, "success");
+      loadBanList();
+    } catch (e) {
+      showToast("Unban failed", "error");
+    }
+  }
+
+  let autoBanIntervalId = null;
+
+  function startAutoBanCheck() {
+    autoBanIntervalId = setInterval(() => {
+      if (activeSubTab === "NETWORK") {
+        banOldPeers(true);
+      }
+    }, autoBanInterval);
+  }
+
+  let pingHost = "hemp0x.com";
+  let pingLoading = false;
+
+  let portHost = "127.0.0.1";
+  let portNum = 80;
+  let portLoading = false;
+
+  // Network Result Modal State
+  let showNetworkResultModal = false;
+  let networkResultTitle = "";
+  let networkResultContent = "";
+
+  function openNetworkResult(title, content) {
+    networkResultTitle = title;
+    networkResultContent = content;
+    showNetworkResultModal = true;
+  }
+
+  // loadNetInfo removed
+
+  async function runPing() {
+    if (!tauriReady || !pingHost) return;
+    pingLoading = true;
+    try {
+      const res = await core.invoke("execute_ping", { host: pingHost });
+      openNetworkResult(`PING: ${pingHost}`, res);
+    } catch (e) {
+      openNetworkResult(`PING FAILED: ${pingHost}`, `Error: ${e}`);
+    }
+    pingLoading = false;
+  }
+
+  async function checkPort() {
+    if (!tauriReady || !portHost || !portNum) return;
+    portLoading = true;
+    try {
+      const isOpen = await core.invoke("check_open_port", {
+        host: portHost,
+        port: Number(portNum),
+      });
+      const status = isOpen ? "OPEN / REACHABLE" : "CLOSED / BLOCKED";
+      const icon = isOpen ? "✅" : "⛔";
+      const desc = isOpen
+        ? `Successfully connected to ${portHost}:${portNum}.\n\nIf checking localhost, the service is running.\nIf checking remote, the port is accessible.`
+        : `Could not connect to ${portHost}:${portNum}.\n\n- Service might be down\n- Firewall might be blocking\n- Port might be closed`;
+
+      openNetworkResult(`${icon} PORT ${status}`, desc);
+    } catch (e) {
+      openNetworkResult("⚠️ PORT CHECK ERROR", `Failed to check port: ${e}`);
+    }
+    portLoading = false;
+  }
+
+  let banListRefreshTimer;
+  // Auto-refresh ban list every 30s when tab is active
+  $: if (activeSubTab === "NETWORK") {
+    loadBanList();
+    // Clear existing to avoid dupes
+    if (banListRefreshTimer) clearInterval(banListRefreshTimer);
+    banListRefreshTimer = setInterval(loadBanList, 30000); // 30s refresh
+  } else {
+    if (banListRefreshTimer) clearInterval(banListRefreshTimer);
+  }
+
+  // Key Management State
+
+  let showKeyModal = false;
+  let keyModalMode = "export"; // "export" or "import"
+  let keyList = []; // Array of { address, selected, key (optional), label (optional) }
+
+  // Unlock State
+  let showUnlockModal = false;
+  let unlockPassword = "";
+  let unlockError = "";
+
+  async function tryUnlockWallet() {
+    if (!unlockPassword) return;
+    try {
+      unlockError = "";
+      // Unlock for 60 seconds
+      await core.invoke("wallet_unlock", {
+        passphrase: unlockPassword,
+        timeout: 60,
+      });
+      showUnlockModal = false;
+      unlockPassword = "";
+      // Retry export
+      executeExport();
+    } catch (err) {
+      unlockError = "Incorrect passphrase";
+    }
+  }
+  let keyListLoading = false;
+  let processingKeys = false;
+  let importRescan = false;
+
+  async function openExportModal() {
+    if (!tauriReady) return;
+    keyListLoading = true;
+    showKeyModal = true;
+    keyModalMode = "export";
+    keyList = [];
+
+    try {
+      // Get all addresses with balance or history would be ideal,
+      // but listreceivedbyaddress is a good start.
+      // We will use get_receive_addresses which wraps listreceivedbyaddress
+      const addresses = await core.invoke("get_receive_addresses", {
+        showChange: true,
+      });
+      // Add change addresses? Maybe later.
+
+      keyList = addresses.map((addr) => ({
+        address: addr.address,
+        label: addr.label || "",
+        balance: addr.balance || "0.00000000",
+        selected: false,
+      }));
+    } catch (err) {
+      showToast("Failed to load addresses: " + err, "error");
+    }
+    keyListLoading = false;
+  }
+
+  async function executeExport() {
+    const selected = keyList.filter((k) => k.selected);
+    if (selected.length === 0) {
+      showToast("Select at least one address", "error");
+      return;
+    }
+
+    if (
+      !(await ask(
+        "Security Warning:\nThis will save UNENCRYPTED private keys to a file.\nAnyone with this file can access your funds.\n\nDo you want to proceed?",
+        { title: "DANGER: EXPORTING KEYS", kind: "warning" },
+      ))
+    ) {
+      return;
+    }
+
+    try {
+      const savePath = await save({
+        title: "Save Private Keys Backup",
+        defaultPath: "hemp0x_keys_backup.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!savePath) return;
+
+      processingKeys = true;
+      const exportData = [];
+
+      for (const item of selected) {
+        try {
+          const privKey = await core.invoke("dump_priv_key", {
+            address: item.address,
+          });
+          exportData.push({
+            address: item.address,
+            key: privKey,
+            label: item.label,
+            date: new Date().toISOString(),
+          });
+        } catch (e) {
+          // Check for locked wallet error (code -13 is RPC_WALLET_UNLOCK_NEEDED)
+          if (
+            e.toString().includes("code: -13") ||
+            e.toString().includes("unlock")
+          ) {
+            showToast("Wallet is locked. Please unlock first.", "error");
+            showUnlockModal = true;
+            processingKeys = false;
+            return; // Stop export loop
+          }
+          console.error(`Failed to export ${item.address}:`, e);
+        }
+      }
+
+      await core.invoke("write_text_file", {
+        path: savePath,
+        contents: JSON.stringify(exportData, null, 2),
+      });
+
+      showToast(`Exported ${exportData.length} keys successfully`, "success");
+      showKeyModal = false;
+    } catch (err) {
+      showToast("Export failed: " + err, "error");
+    }
+    processingKeys = false;
+  }
+
+  async function openImportModal() {
+    if (!tauriReady) return;
+    try {
+      const openPath = await open({
+        title: "Select Key Backup File",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        multiple: false,
+      });
+      if (!openPath) return;
+
+      keyListLoading = true;
+      showKeyModal = true;
+      keyModalMode = "import";
+      keyList = [];
+
+      const contents = await core.invoke("read_text_file", { path: openPath });
+      let data = JSON.parse(contents);
+      if (!Array.isArray(data)) data = [data]; // Handle single object
+
+      keyList = data
+        .map((item) => ({
+          address: item.address || "Unknown",
+          key: item.key,
+          label: item.label || "",
+          selected: true, // Select all by default for import
+          status: "pending",
+        }))
+        .filter((k) => k.key); // Only valid entries
+    } catch (err) {
+      showToast("Failed to load file: " + err, "error");
+      showKeyModal = false;
+    }
+    keyListLoading = false;
+  }
+
+  async function executeImport() {
+    const selected = keyList.filter((k) => k.selected);
+    if (selected.length === 0) {
+      showToast("Select at least one key", "error");
+      return;
+    }
+
+    if (
+      !(await ask(
+        "Proceed with private key import?\nThis may take some time.",
+        { title: "Import Keys", kind: "info" },
+      ))
+    ) {
+      return;
+    }
+
+    processingKeys = true;
+    let successCount = 0;
+
+    for (let i = 0; i < selected.length; i++) {
+      const item = selected[i];
+      // Only rescan on the last item if enabled
+      const doRescan = importRescan && i === selected.length - 1;
+
+      try {
+        await core.invoke("import_priv_key", {
+          privKey: item.key,
+          label: item.label,
+          rescan: doRescan,
+        });
+        successCount++;
+        // Update status in list if we were keeping the modal open (we aren't)
+      } catch (e) {
+        console.error(`Failed to import ${item.address}:`, e);
+        // Could mark as failed in UI
+      }
+    }
+
+    showToast(`Imported ${successCount} keys.`, "success");
+    processingKeys = false;
+    showKeyModal = false;
+  }
+
+  function toggleSelectAll() {
+    const allSelected = keyList.every((k) => k.selected);
+    keyList = keyList.map((k) => ({ ...k, selected: !allSelected }));
+  }
+
+  // Config Help
+  let showConfHelp = false;
+  function toggleConfHelp() {
+    showConfHelp = !showConfHelp;
+  }
+
   async function loadNetworkMode() {
     try {
       networkMode = await core.invoke("get_network_mode");
@@ -653,6 +991,13 @@
       loadDataInfo(); // Load data folder info
       loadUpdateInfo(); // Load update tab info
       loadNetworkMode();
+      startAutoBanCheck(); // Start auto peer protection
+    }
+  });
+
+  onDestroy(() => {
+    if (autoBanIntervalId) {
+      clearInterval(autoBanIntervalId);
     }
   });
 </script>
@@ -662,7 +1007,7 @@
     <!-- HEADER / TABS -->
     <header class="panel-header no-border">
       <div class="sub-tabs">
-        {#each ["CONSOLE", "WALLET", "CONFIG", "DATA", "SYSTEM", "LOGS"] as tab}
+        {#each ["CONSOLE", "WALLET", "CONFIG", "DATA", "SYSTEM", "NETWORK"] as tab}
           <button
             class="sub-tab-btn"
             class:active={activeSubTab === tab}
@@ -679,11 +1024,16 @@
     </header>
 
     <!-- BODY -->
-    <div class="tools-body">
+    <div
+      class="tools-body"
+      class:no-scroll={activeSubTab === "CONSOLE" ||
+        activeSubTab === "CONFIG" ||
+        activeSubTab === "LOGS"}
+    >
       {#key activeSubTab}
         <div class="transition-wrapper" in:fly={{ y: 20, duration: 300 }}>
           {#if activeSubTab === "CONSOLE"}
-            <div class="tool-grid console-view">
+            <div class="tool-grid console-view full-height">
               <div class="terminal-screen">
                 <div class="scanline"></div>
                 <textarea
@@ -807,7 +1157,7 @@
                 </div>
               </div>
 
-              <!-- SECURITY COLUMN -->
+              <!-- SECURITY & KEY MANAGEMENT COLUMN -->
               <div class="glass-panel panel-soft card">
                 <header class="card-header">
                   <span class="card-title">SECURITY</span>
@@ -834,10 +1184,29 @@
                       bind:value={passNewConfirm}
                     />
                   </div>
-                  <div class="spacer"></div>
                   <button class="cyber-btn wide" on:click={changePassword}>
                     [ UPDATE PASSWORD ]
                   </button>
+
+                  <div class="divider"></div>
+
+                  <p class="desc" style="margin-top: 0;">
+                    Import/Export private keys.
+                  </p>
+                  <div class="btn-row">
+                    <button
+                      class="cyber-btn ghost wide danger"
+                      on:click={openExportModal}
+                    >
+                      EXPORT KEYS
+                    </button>
+                    <button
+                      class="cyber-btn ghost wide"
+                      on:click={openImportModal}
+                    >
+                      IMPORT KEYS
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -848,6 +1217,9 @@
                 ></textarea>
               </div>
               <div class="action-bar-right">
+                <button class="cyber-btn ghost" on:click={toggleConfHelp}
+                  >HELP</button
+                >
                 <button
                   class="cyber-btn ghost"
                   on:click={() => loadConfig(false)}>RELOAD</button
@@ -1067,14 +1439,196 @@
                 </div>
               </div>
 
-              <!-- NETWORK SETTINGS -->
+              <!-- NETWORK SETTINGS MOVED TO NETWORK TAB -->
+            </div>
+          {:else if activeSubTab === "NETWORK"}
+            <div class="tool-grid network-overhaul">
+              <!-- 1. PEER PROTECTION (With Merged Ban List) -->
               <div class="update-panel">
-                <h3 class="update-title" style="margin-bottom: 0.8rem">
-                  📡 NETWORK SETTINGS
+                <h3 class="update-title">🛡️ PEER PROTECTION</h3>
+                <p
+                  class="section-desc"
+                  style="margin-bottom: 1rem; color: #888; font-size: 0.8rem;"
+                >
+                  App automatically checks for bad peers every 120 seconds.
+                  Peers running outdated versions (below v4.7.0) are banned for
+                  24 hours.
+                </p>
+
+                <div
+                  class="action-row"
+                  style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;"
+                >
+                  <button
+                    class="cyber-btn small"
+                    on:click={() => banOldPeers(false)}
+                    disabled={banningInProgress}
+                  >
+                    {banningInProgress ? "SCANNING..." : "🔍 CHECK NOW"}
+                  </button>
+                  <!-- Refresh logic is now automatic, button removed -->
+                </div>
+
+                {#if banResult && banResult.banned_count > 0}
+                  <div
+                    class="ban-result"
+                    style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(0,255,65,0.05); border-radius: 8px; border: 1px solid rgba(0,255,65,0.2);"
+                  >
+                    <strong style="color: var(--color-primary);"
+                      >✓ Banned {banResult.banned_count} outdated peer(s):</strong
+                    >
+                    <ul
+                      style="margin: 0.5rem 0 0 1rem; font-size: 0.75rem; color: #aaa;"
+                    >
+                      {#each banResult.banned_peers as peer}
+                        <li class="mono">{peer}</li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
+
+                <!-- BAN LIST INTEGRATED HERE -->
+                <div
+                  class="ban-list-container"
+                  style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem; margin-top: 0.5rem;"
+                >
+                  <h4
+                    style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; display: flex; justify-content: space-between;"
+                  >
+                    <span>🚫 BANNED PEERS</span>
+                    <span
+                      style="font-size: 0.75rem; font-weight: normal; color: #666;"
+                      >(Refreshes every 30s)</span
+                    >
+                  </h4>
+
+                  {#if banListLoading && banList.length === 0}
+                    <div
+                      style="text-align: center; padding: 1rem; color: #666; font-style: italic; font-size: 0.8rem;"
+                    >
+                      Loading list...
+                    </div>
+                  {:else if banList.length === 0}
+                    <div
+                      style="text-align: center; padding: 1rem; color: #666; font-size: 0.8rem;"
+                    >
+                      No banned peers
+                    </div>
+                  {:else}
+                    <div
+                      class="ban-list-scroll"
+                      style="max-height: 200px; overflow-y: auto; padding-right: 5px;"
+                    >
+                      {#each banList as ban}
+                        <div
+                          class="ban-entry"
+                          style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px; margin-bottom: 0.3rem;"
+                        >
+                          <div style="overflow: hidden;">
+                            <div
+                              class="mono"
+                              style="color: #ddd; font-size: 0.75rem;"
+                            >
+                              {ban.address}
+                            </div>
+                            <div style="font-size: 0.65rem; color: #777;">
+                              Reason: {ban.ban_reason}
+                            </div>
+                          </div>
+                          <button
+                            class="cyber-btn small ghost"
+                            on:click={() => unbanPeer(ban.address)}
+                            style="font-size: 0.6rem; padding: 0.2rem 0.5rem; height: auto;"
+                            >UNBAN</button
+                          >
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- 2. DIAGNOSTIC TOOLS -->
+              <div class="update-panel">
+                <h3 class="update-title" style="margin-bottom: 1rem;">
+                  🛠️ DIAGNOSTICS
                 </h3>
+
+                <!-- PING -->
+                <div class="tool-row" style="margin-bottom: 1.5rem;">
+                  <h4
+                    style="font-size: 0.9rem; color: var(--color-primary); margin-bottom: 0.5rem;"
+                  >
+                    Ping Test
+                  </h4>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <div class="input-wrapper" style="flex:1;">
+                      <input
+                        type="text"
+                        class="input-glass"
+                        bind:value={pingHost}
+                        placeholder="Host"
+                        on:keydown={(e) => e.key === "Enter" && runPing()}
+                      />
+                    </div>
+                    <button
+                      class="cyber-btn small"
+                      on:click={runPing}
+                      disabled={pingLoading}
+                    >
+                      {pingLoading ? "PINGING..." : "PING"}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- PORT CHECK -->
+                <div class="tool-row">
+                  <h4
+                    style="font-size: 0.9rem; color: var(--color-primary); margin-bottom: 0.5rem;"
+                  >
+                    Port Checker
+                  </h4>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <div class="input-wrapper" style="flex:2;">
+                      <input
+                        type="text"
+                        class="input-glass"
+                        bind:value={portHost}
+                        placeholder="Host"
+                      />
+                    </div>
+                    <div class="input-wrapper" style="flex:1;">
+                      <input
+                        type="number"
+                        class="input-glass"
+                        bind:value={portNum}
+                        placeholder="Port"
+                      />
+                    </div>
+                    <button
+                      class="cyber-btn small"
+                      on:click={checkPort}
+                      disabled={portLoading}
+                    >
+                      {portLoading ? "..." : "CHECK"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. NETWORK MODE (Moved to Bottom) -->
+              <div class="update-panel">
                 <div
                   style="display: flex; justify-content: space-between; align-items: center;"
                 >
+                  <div>
+                    <h3 class="update-title" style="margin-bottom: 0.2rem;">
+                      📡 NETWORK MODE
+                    </h3>
+                    <div style="font-size: 0.75rem; color: #888;">
+                      Switching requires restart
+                    </div>
+                  </div>
                   <div
                     class="network-selector"
                     style="display: flex; gap: 0.5rem;"
@@ -1092,13 +1646,6 @@
                       on:click={() => changeNetwork("regtest")}>REGTEST</button
                     >
                   </div>
-                  <p class="section-subtitle" style="margin: 0;">
-                    MODE: <strong
-                      class="mono"
-                      style="color: var(--color-primary)"
-                      >{networkMode.toUpperCase()}</strong
-                    >
-                  </p>
                 </div>
               </div>
             </div>
@@ -1107,8 +1654,214 @@
       {/key}
     </div>
 
+    <!-- NETWORK RESULT MODAL -->
+    {#if showNetworkResultModal}
+      <div
+        class="modal-overlay"
+        role="button"
+        tabindex="0"
+        on:click|self={() => (showNetworkResultModal = false)}
+        on:keydown={(e) =>
+          e.key === "Escape" && (showNetworkResultModal = false)}
+      >
+        <div class="modal-staged" style="width: 500px; max-width: 90vw;">
+          <div class="modal-header">
+            <h3
+              class="mono"
+              style="font-size: 1rem; color: var(--color-primary);"
+            >
+              {networkResultTitle}
+            </h3>
+            <button
+              class="btn-close-x"
+              on:click={() => (showNetworkResultModal = false)}>✕</button
+            >
+          </div>
+          <div class="modal-body" style="padding: 1rem;">
+            <div
+              style="max-height: 300px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 4px; padding: 0.5rem;"
+            >
+              <pre
+                style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem; line-height: 1.2; color: #ccc; margin: 0;">{networkResultContent}</pre>
+            </div>
+            <div
+              style="display: flex; justify-content: flex-end; margin-top: 1rem;"
+            >
+              <button
+                class="cyber-btn"
+                on:click={() => (showNetworkResultModal = false)}>CLOSE</button
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if showKeyModal}
+      <div
+        class="modal-overlay"
+        role="button"
+        tabindex="0"
+        on:click|self={() => (showKeyModal = false)}
+        on:keydown={(e) => e.key === "Escape" && (showKeyModal = false)}
+      >
+        <div class="modal-staged wide">
+          <div class="modal-header">
+            <h3>
+              {keyModalMode === "export"
+                ? "📤 EXPORT PRIVATE KEYS"
+                : "📥 IMPORT PRIVATE KEYS"}
+            </h3>
+            <button class="btn-close-x" on:click={() => (showKeyModal = false)}
+              >✕</button
+            >
+          </div>
+          <div class="modal-body">
+            {#if keyListLoading}
+              <div style="padding: 2rem; text-align: center;">
+                Loading keys...
+              </div>
+            {:else}
+              <div
+                class="key-list-controls"
+                style="margin-bottom: 0.5rem; display:flex; justify-content:space-between;"
+              >
+                <button class="text-btn" on:click={toggleSelectAll}
+                  >Select All / None</button
+                >
+                <span class="mono"
+                  >{keyList.filter((k) => k.selected).length} selected</span
+                >
+              </div>
+
+              <div class="key-list-scroll key-list-dark">
+                {#each keyList as item}
+                  <label class="key-item">
+                    <input type="checkbox" bind:checked={item.selected} />
+                    <div style="flex: 1; min-width: 0;">
+                      <div
+                        class="mono"
+                        style="color: var(--color-primary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;"
+                      >
+                        {item.address}
+                      </div>
+                      {#if item.label}<div
+                          style="font-size: 0.7rem; color: #888;"
+                        >
+                          {item.label}
+                        </div>{/if}
+                    </div>
+                    <div
+                      class="key-balance mono"
+                      style="text-align: right; flex-shrink: 0; margin-left: 1rem;"
+                    >
+                      <div
+                        style="color: #fff; font-size: 0.85rem; font-weight: 600;"
+                      >
+                        {item.balance}
+                      </div>
+                      <div style="font-size: 0.65rem; color: #666;">HEMP</div>
+                    </div>
+                  </label>
+                {/each}
+                {#if keyList.length === 0}
+                  <div style="padding: 2rem; text-align: center; color: #666;">
+                    No keys found.
+                  </div>
+                {/if}
+              </div>
+
+              {#if keyModalMode === "import"}
+                <div style="margin-top: 1rem;">
+                  <label class="toggle">
+                    <input type="checkbox" bind:checked={importRescan} />
+                    <span
+                      >Rescan blockchain after import (slower but finds
+                      transactions)</span
+                    >
+                  </label>
+                </div>
+              {/if}
+            {/if}
+          </div>
+          <div class="modal-actions">
+            {#if keyModalMode === "export"}
+              <button
+                class="cyber-btn danger"
+                on:click={executeExport}
+                disabled={keyListLoading || processingKeys}
+              >
+                {processingKeys ? "EXPORTING..." : "EXPORT SELECTED"}
+              </button>
+            {:else}
+              <button
+                class="cyber-btn"
+                on:click={executeImport}
+                disabled={keyListLoading || processingKeys}
+              >
+                {processingKeys ? "IMPORTING..." : "IMPORT SELECTED"}
+              </button>
+            {/if}
+            <button
+              class="cyber-btn ghost"
+              on:click={() => (showKeyModal = false)}>CANCEL</button
+            >
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if showUnlockModal}
+      <div
+        class="modal-overlay"
+        role="button"
+        tabindex="0"
+        on:click|self={() => (showUnlockModal = false)}
+        on:keydown={(e) => e.key === "Escape" && (showUnlockModal = false)}
+      >
+        <div class="modal-staged">
+          <div class="modal-header">
+            <h3>🔐 UNLOCK WALLET</h3>
+          </div>
+          <div class="modal-body">
+            <p>Enter your wallet passphrase to export keys.</p>
+            <div class="input-wrapper brackets">
+              <input
+                type="password"
+                class="input-glass"
+                placeholder="Passphrase"
+                bind:value={unlockPassword}
+                on:keydown={(e) => e.key === "Enter" && tryUnlockWallet()}
+              />
+            </div>
+            {#if unlockError}
+              <div
+                class="error-msg"
+                style="color: #ff5555; margin-top: 0.5rem; font-size: 0.8rem;"
+              >
+                {unlockError}
+              </div>
+            {/if}
+          </div>
+          <div class="modal-actions">
+            <button class="cyber-btn" on:click={tryUnlockWallet}>UNLOCK</button>
+            <button
+              class="cyber-btn ghost"
+              on:click={() => (showUnlockModal = false)}>CANCEL</button
+            >
+          </div>
+        </div>
+      </div>
+    {/if}
+
     {#if showNetworkModal}
-      <div class="modal-overlay" on:click|self={cancelNetworkSwitch}>
+      <div
+        class="modal-overlay"
+        role="button"
+        tabindex="0"
+        on:click|self={cancelNetworkSwitch}
+        on:keydown={(e) => e.key === "Escape" && cancelNetworkSwitch()}
+      >
         <div class="modal-staged">
           <div class="modal-header">
             <h3>⚠️ RESTART REQUIRED</h3>
@@ -1147,20 +1900,123 @@
       </div>
     {/if}
   </div>
+
+  {#if showConfHelp}
+    <div
+      class="modal-overlay"
+      role="button"
+      tabindex="0"
+      on:click|self={toggleConfHelp}
+      on:keydown={(e) => e.key === "Escape" && toggleConfHelp()}
+    >
+      <div class="modal-staged wide">
+        <div class="modal-header">
+          <h3>📝 CONFIGURATION GUIDE</h3>
+          <button class="btn-close-x" on:click={toggleConfHelp}>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="conf-help-text">
+            <p class="highlight-warning">
+              ⚠️ <strong>CRITICAL FOR WINDOWS:</strong> Set
+              <code>daemon=0</code>. Setting <code>daemon=1</code> is for headless
+              Linux/VPS only and will prevent the GUI from connecting to the node.
+            </p>
+
+            <h4 style="color:var(--color-primary); margin-top:1rem;">
+              hemp.conf Reference
+            </h4>
+            <p style="font-size:0.8rem; margin-bottom:0.5rem; color:#888;">
+              Complete reference for <code>hemp.conf</code>. Copy options as
+              needed.
+            </p>
+            <pre class="selectable">
+# ==============================================================================
+#                      HEMP0x CORE CONFIGURATION TEMPLATE
+# ==============================================================================
+
+# --- ESSENTIAL SETTINGS ---
+# server=1: Tells the node to accept JSON-RPC commands.
+# REQUIRED for Hemp0x Commander to control the node.
+server=1
+
+# listen=1: Listens for connections from outside peers.
+# 1 = Run as a full node (Help the network).
+# 0 = Don't accept incoming connections (Stealth/Leech mode).
+listen=1
+
+# daemon=?: Run in background?
+# 0 = Run interactively/controlled by GUI (REQUIRED FOR WINDOWS APP).
+# 1 = Run headless in background (Linux/VPS only).
+daemon=0
+
+# --- PERFORMANCE & STORAGE ---
+# dbcache=N: Database cache size in Megabytes.
+# Higher = Faster Sync, uses more RAM.
+# 450 = Default (Low RAM).
+# 4096 = 4GB (Recommended for fast sync if you have RAM).
+dbcache=4096
+
+# prune=N: Prune block storage to N Megabytes?
+# 0 = Disable pruning (Keep full history - Required for some features).
+# 550 = Minimum size (Saves disk space, but disables Wallet scans on old keys).
+prune=0
+
+# maxconnections=N: Maximum number of peer connections.
+# Default is 125. Lower if you have limited bandwidth.
+# maxconnections=40
+
+# --- INDEXES (Advanced Features) ---
+# Enable these if you use the "Assets" or "Tools" tabs heavily.
+# note: Changing these requires a -reindex (takes time).
+
+# Required for 'getrawtransaction' (Detailed TX lookup)
+txindex=1
+# Required for 'getaddress*' calls (Balance lookups API)
+addressindex=1
+# Required for Asset features
+assetindex=1
+# Records block timestamps
+timestampindex=1
+# Tracks spent outputs
+spentindex=1
+
+# --- RPC (Remote Control Security) ---
+# Username and password for local control.
+# CHANGE THESE TO SECURE VALUES!
+rpcuser=hemp0xuser
+rpcpassword=CHANGE_THIS_TO_SECURE_PASSWORD
+
+# rpcallowip=IP: Who can issue commands?
+# 127.0.0.1 = Localhost only (Most Secure).
+# 192.168.1.* = Local Network (Less Secure).
+rpcallowip=127.0.0.1
+
+# rpcport=N: Custom port for RPC interactions.
+# Default Mainnet: 8818
+# rpcport=8818
+</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
   .view-tools {
     display: flex;
     flex-direction: column;
-    height: 100%;
     gap: 1.2rem;
+    flex: 1; /* Force expansion in flex parent */
+    min-height: 0; /* KEY FIX: Allow shrinking to viewport */
+    /* No negative margins needed. Global padding handled by App.svelte */
   }
   .main-frame {
     flex: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0; /* Crucial for nested scroll */
   }
 
   /* --- TOAST --- */
@@ -1253,40 +2109,54 @@
   /* --- BODY --- */
   .tools-body {
     flex: 1;
-    overflow-y: auto; /* Enable scrolling */
-    padding: 0.5rem;
-    padding-bottom: 2.5rem; /* Increased to 2.5rem to lift URL safely above edge */
+    min-height: 0; /* KEY FIX: Allow shrinking */
+    overflow-y: auto; /* Default enable scrolling */
+    padding: 0.5rem; /* Standard 0.5rem padding */
+    padding-bottom: 3rem; /* EXTRA PADDING: Ensure bottom tools are visible */
+
     position: relative;
     background: rgba(0, 0, 0, 0.2);
+    display: flex; /* Switch to flex column */
+    flex-direction: column;
+  }
+  .tools-body.no-scroll {
+    overflow-y: hidden; /* Prevent double scrollbars for Terminals */
   }
   .transition-wrapper {
-    height: 100%;
+    flex: 1;
+    height: auto;
+    width: 100%;
     display: flex;
     flex-direction: column;
   }
   .tool-grid {
     display: flex;
     flex-direction: column;
-    gap: 1.2rem;
-    height: 100%;
+    gap: 0.5rem; /* Reduced gap to maximize editor height */
+    flex: 1; /* Use flex to fill tools-body */
+    width: 100%;
   }
   .tool-grid.wallet-view {
     flex-direction: row; /* Side-by-side for wallet */
+    flex-wrap: wrap; /* Allow wrapping on small screens */
     justify-content: center;
     align-items: stretch; /* Ensure same height */
     gap: 2rem;
+    padding-bottom: 2rem; /* Add breathing room for Wallet tab */
   }
   .tool-grid.full-height {
-    height: 100%;
+    flex: 1; /* Flex grow */
+    height: 100%; /* Force fill */
+    min-height: 0; /* Important for nested flex containers */
   }
 
   /* --- CONSOLE / LOGS --- */
   .terminal-screen {
     flex: 1; /* Grows to fill space */
     display: flex; /* Flex container for textarea */
-    flex-direction: column;
-    min-height: 400px; /* USER REQUEST: Much taller. */
-    height: 100%; /* Force height */
+    flex-direction: column; /* Single definition */
+    min-height: 0;
+    /* Removed height: 100% to rely purely on flex growth */
     background: #000;
     border: 1px solid #333;
     padding: 5px;
@@ -1295,38 +2165,16 @@
     overflow: hidden;
     box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
   }
-  .terminal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.2rem 0.6rem;
-    border-bottom: 1px solid #333;
-    background: rgba(0, 0, 0, 0.3);
-  }
-  .term-title {
-    color: #444;
-    font-size: 0.7rem;
-    font-family: monospace;
-    letter-spacing: 1px;
-  }
-  .clear-btn {
-    background: transparent;
-    border: none;
-    color: #555;
-    font-size: 0.7rem;
-    cursor: pointer;
-    font-family: monospace;
-    transition: color 0.2s;
-  }
-  .clear-btn:hover {
-    color: var(--color-primary);
-  }
+
   .console-output,
   .config-editor {
     flex: 1; /* Grow to fill terminal-screen */
     width: 100%;
     height: 100%;
     background: transparent;
+    resize: none; /* User cannot resize */
+    box-sizing: border-box;
+    display: block;
     color: #0f0;
     border: none;
     resize: none;
@@ -1351,6 +2199,14 @@
     background: #333;
     border: 1px solid #444;
   }
+
+  .action-bar-right {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 0.5rem; /* Reduced margin for compactness */
+  }
+
   .console-output::-webkit-scrollbar-thumb:hover,
   .config-editor::-webkit-scrollbar-thumb:hover {
     background: var(--color-primary);
@@ -1488,8 +2344,9 @@
 
   /* --- WALLET CARDS --- */
   .card {
-    flex: 1;
-    max-width: 450px;
+    flex: 1 1 340px; /* Allow varying width, but minimum 340px */
+    min-width: 320px;
+    max-width: 600px; /* Allow growing more than 450px if needed */
     display: flex;
     flex-direction: column;
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1512,9 +2369,6 @@
     display: flex;
     flex-direction: column;
     gap: 1.2rem;
-    flex: 1;
-  }
-  .spacer {
     flex: 1;
   }
   .desc {
@@ -1577,7 +2431,7 @@
     flex-direction: column;
     gap: 1.5rem;
     padding: 0.5rem 0;
-    overflow-y: auto;
+    /* overflow-y: auto; REMOVED - Let main body scroll */
   }
   .data-panel {
     background: rgba(0, 0, 0, 0.3);
@@ -1667,15 +2521,7 @@
     background: rgba(255, 68, 68, 0.1);
     border-color: #ff6666;
   }
-  .cyber-btn.warning {
-    background: rgba(255, 165, 0, 0.2);
-    border-color: #ffa500;
-    color: #ffa500;
-  }
-  .cyber-btn.warning:hover {
-    background: rgba(255, 165, 0, 0.4);
-    box-shadow: 0 0 15px rgba(255, 165, 0, 0.4);
-  }
+
   .cyber-btn.info {
     background: rgba(0, 191, 255, 0.2);
     border-color: #00bfff;
@@ -1729,6 +2575,36 @@
     color: #ff6666;
     font-weight: bold;
   }
+  /* Help Modal Content */
+  .conf-help-text {
+    text-align: left;
+    font-size: 0.95rem; /* Increased size for readability */
+    line-height: 1.5;
+  }
+  .highlight-warning {
+    color: #ff5555;
+    background: rgba(255, 68, 68, 0.1);
+    border: 1px solid #ff5555;
+    padding: 0.8rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+    background: #000;
+    padding: 1rem;
+    border-radius: 6px;
+    border: 1px solid #333;
+    color: #aaffaa;
+    overflow-x: auto;
+    font-family: "Consolas", monospace;
+    white-space: pre-wrap;
+    font-size: 0.92rem; /* Larger code font */
+    line-height: 1.4;
+  }
 
   /* === UPDATE TAB STYLES === */
   .update-view {
@@ -1736,7 +2612,7 @@
     flex-direction: column;
     gap: 1rem; /* User Request: Compact layout */
     padding: 0.5rem 0;
-    overflow-y: auto;
+    /* overflow-y: auto; REMOVED - Let main body scroll */
   }
   .update-panel {
     background: rgba(0, 0, 0, 0.3);
@@ -1795,9 +2671,10 @@
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(4px);
     display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
+    align-items: center; /* Center vertically */
+    justify-content: center; /* Center horizontally */
+    padding: 0; /* No extra padding needed with center alignment */
+    z-index: 99999;
   }
   .modal-staged {
     width: 100%;
@@ -1806,12 +2683,60 @@
     border: 1px solid var(--color-primary);
     border-radius: 12px;
     box-shadow: 0 0 40px rgba(0, 255, 65, 0.1);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+  }
+  .modal-staged.wide {
+    max-width: 96vw; /* Slightly reduced width as requested */
+    height: 99%; /* Absolute maximum vertical height */
+    /* Removed max-height cap to allow full screen usage */
   }
   .modal-header {
     background: rgba(0, 255, 65, 0.1);
     padding: 1rem 1.5rem;
     border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .modal-body {
+    padding: 1.5rem;
+    color: #ccc;
+    text-align: left;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0; /* Important for flex items scrolling */
+  }
+  /* Apply scrollbar styles to modal body */
+  .modal-body::-webkit-scrollbar {
+    width: 10px;
+  }
+  .modal-body::-webkit-scrollbar-track {
+    background: #111;
+  }
+  .modal-body::-webkit-scrollbar-thumb {
+    background: #333;
+    border: 1px solid #444;
+  }
+  .modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+  }
+  .btn-close-x {
+    background: transparent;
+    border: none;
+    color: var(--color-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    transition: all 0.2s;
+  }
+  .btn-close-x:hover {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+    transform: scale(1.1);
   }
   .modal-header h3 {
     margin: 0;
@@ -1821,11 +2746,6 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-  }
-  .modal-body {
-    padding: 2rem;
-    color: #ccc;
-    text-align: center;
   }
   .modal-actions {
     display: flex;
@@ -1880,14 +2800,7 @@
     gap: 1rem;
     margin-bottom: 0.8rem;
   }
-  .update-status {
-    color: #888;
-    font-size: 0.8rem;
-    padding: 0.8rem;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 4px;
-    margin-bottom: 0.8rem;
-  }
+
   .update-fallback {
     text-align: center;
     padding: 0.5rem;
@@ -1917,5 +2830,53 @@
     border: 1px dashed rgba(255, 255, 255, 0.1);
     border-radius: 6px;
     text-align: center;
+  }
+
+  /* === KEY MANAGEMENT MODAL === */
+  .key-list-scroll {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .key-list-dark .key-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .key-list-dark .key-item:hover {
+    background: rgba(0, 255, 65, 0.05);
+  }
+  .key-list-dark .key-item:last-child {
+    border-bottom: none;
+  }
+  .key-list-dark .key-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+  }
+  .key-list-controls {
+    padding: 0.6rem 0.2rem;
+  }
+  .key-list-controls .text-btn {
+    background: rgba(0, 255, 65, 0.1);
+    border: 1px solid var(--color-primary);
+    color: var(--color-primary);
+    padding: 0.4rem 1rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .key-list-controls .text-btn:hover {
+    background: var(--color-primary);
+    color: #000;
   }
 </style>

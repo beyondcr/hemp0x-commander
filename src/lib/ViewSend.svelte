@@ -1,6 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import { core } from "@tauri-apps/api";
+    import { save, open } from "@tauri-apps/plugin-dialog";
 
     // --- FORM STATE ---
     let address = "";
@@ -43,19 +44,34 @@
         loadFavorites();
     });
 
+    // --- ASSET DATA ---
+    // Store full objects: { name, balance, type }
+    let assetList = [];
+    // Reactive: selected asset balance
+    $: selectedBalance = (() => {
+        if (asset === "HEMP") return walletBalance;
+        const found = assetList.find((a) => a.name === asset);
+        return found ? found.balance : "0.00";
+    })();
+
     // React to node state (Persistent Tabs support)
     $: if (tauriReady) {
         if (nodeInfo.state === "RUNNING") {
             core.invoke("list_assets")
                 .then((items) => {
+                    // items is Vec<AssetItem> { name, balance, asset_type }
+                    assetList = items;
+                    // assets for dropdown (names only)
                     assets = ["HEMP", ...items.map((item) => item.name)];
                 })
                 .catch(() => {
                     assets = ["HEMP"];
+                    assetList = [];
                 });
         } else {
             // Node stopped - reset assets
             assets = ["HEMP"];
+            assetList = [];
         }
     }
 
@@ -139,21 +155,100 @@
     let newAddrInput = "";
     let newLabelInput = "";
 
-    function loadFavorites() {
-        const stored = localStorage.getItem("hemp0x_favs");
-        if (stored) {
-            favorites = JSON.parse(stored);
-            // Migrate old format: add 'locked' field if missing
-            favorites = favorites.map((f) => ({
-                ...f,
-                locked: f.locked ?? false,
-            }));
+    async function loadFavorites() {
+        if (!tauriReady) return;
+        try {
+            const items = await core.invoke("load_address_book");
+            favorites = items;
+        } catch (err) {
+            console.error("Failed to load address book:", err);
         }
     }
 
-    function saveFavorites() {
-        localStorage.setItem("hemp0x_favs", JSON.stringify(favorites));
+    async function saveFavorites() {
+        if (!tauriReady) return;
+        try {
+            await core.invoke("save_address_book", { entries: favorites });
+        } catch (err) {
+            console.error("Failed to save address book:", err);
+        }
     }
+
+    // Export to JSON file via Dialog
+    async function exportAddressBook() {
+        try {
+            const path = await save({
+                filters: [{ name: "JSON", extensions: ["json"] }],
+                defaultPath: "hemp0x_address_book.json",
+            });
+            if (!path) return;
+
+            const data = JSON.stringify(favorites, null, 2);
+            await core.invoke("write_text_file", { path, content: data });
+            alert("Address Book exported successfully!");
+        } catch (err) {
+            console.error(err);
+            alert("Export failed: " + err);
+        }
+    }
+
+    // Import from JSON file via Dialog
+    async function triggerImport() {
+        try {
+            const path = await open({
+                multiple: false,
+                filters: [{ name: "JSON", extensions: ["json"] }],
+            });
+            if (!path) return;
+
+            const text = await core.invoke("read_text_file", { path });
+            const imported = JSON.parse(text);
+
+            if (Array.isArray(imported)) {
+                let count = 0;
+                for (const item of imported) {
+                    if (
+                        item.address &&
+                        !favorites.some((f) => f.address === item.address)
+                    ) {
+                        favorites.push({
+                            label: item.label || "Imported",
+                            address: item.address,
+                            locked: item.locked || false,
+                            date: item.date || Date.now(),
+                        });
+                        count++;
+                    }
+                }
+                favorites = favorites; // react
+                saveFavorites();
+                alert(`Imported ${count} new addresses.`);
+            } else {
+                alert("Invalid file format: Expected an array.");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Import failed: " + err);
+        }
+    }
+
+    let showHelp = false;
+    function toggleHelp() {
+        showHelp = !showHelp;
+    }
+
+    const helpJson = `[
+  {
+    "label": "My Wallet",
+    "address": "R...",
+    "locked": false
+  },
+  {
+    "label": "Cold Storage",
+    "address": "HEMP...",
+    "locked": true
+  }
+]`;
 
     function openAddressBook() {
         showAddressBook = true;
@@ -214,19 +309,34 @@
         newLabelInput = "";
     }
 
-    function submitNewAddress() {
+    async function submitNewAddress() {
         if (!newAddrInput.trim()) return;
+        const addr = newAddrInput.trim();
 
-        const exists = favorites.some((f) => f.address === newAddrInput.trim());
-        if (exists) {
-            // Just close form if already exists
+        // 1. Check duplicates
+        if (favorites.some((f) => f.address === addr)) {
             cancelAddForm();
+            return;
+        }
+
+        // 2. Validate Address via RPC
+        try {
+            const res = await core.invoke("run_cli", {
+                args: ["validateaddress", addr],
+            });
+            const json = JSON.parse(res);
+            if (!json.isvalid) {
+                alert("Invalid Hemp0x Address!");
+                return;
+            }
+        } catch (err) {
+            alert("Validation failed: " + err);
             return;
         }
 
         favorites.push({
             label: newLabelInput.trim() || "Unlabeled",
-            address: newAddrInput.trim(),
+            address: addr,
             locked: false,
             date: Date.now(),
         });
@@ -274,8 +384,8 @@
             const maxVal = Math.max(0, totalSelected - estimatedFee);
             amount = maxVal.toFixed(8);
         } else {
-            // Standard mode: balance
-            amount = walletBalance.replace(/,/g, "");
+            // Standard mode: selectedBalance
+            amount = selectedBalance.replace(/,/g, "");
         }
     }
 
@@ -291,10 +401,7 @@
     async function fetchUtxos() {
         if (!tauriReady) return;
         try {
-            // console.log("Fetching UTXOs...");
             const data = await core.invoke("list_utxos");
-            // Filter only spendable and safe?
-            // console.log("UTXOs:", data);
             // Relaxed filter: Show everything that isn't explicitly false, handle missing keys
             utxos = data.sort((a, b) => b.amount - a.amount);
         } catch (e) {
@@ -366,8 +473,6 @@
                 outputs[changeAddr] = changeAmount.toFixed(8);
             }
 
-            // console.log("Broadcasting Advanced:", { inputs, outputs });
-
             const txid = await core.invoke("broadcast_advanced_transaction", {
                 inputs,
                 outputs,
@@ -414,7 +519,7 @@
             <div class="balance-display">
                 <div class="bal-label">AVAILABLE</div>
                 <div>
-                    <span class="value neon-glow">{walletBalance}</span>
+                    <span class="value neon-glow">{selectedBalance}</span>
                     <span class="unit">{asset}</span>
                 </div>
             </div>
@@ -792,10 +897,61 @@
             </div>
 
             <div class="ab-footer">
-                <button class="ab-btn ghost" on:click={closeAddressBook}
-                    >CLOSE</button
-                >
+                <div class="ab-footer-left">
+                    <button class="ab-btn ghost" on:click={triggerImport}
+                        >[ IMPORT ]</button
+                    >
+                    <button class="ab-btn ghost" on:click={exportAddressBook}
+                        >[ EXPORT ]</button
+                    >
+                    <button class="ab-btn help-btn" on:click={toggleHelp}
+                        >?</button
+                    >
+                </div>
+                <div class="ab-footer-right">
+                    <button class="ab-btn ghost" on:click={closeAddressBook}
+                        >CLOSE</button
+                    >
+                </div>
             </div>
+
+            {#if showHelp}
+                <div
+                    class="ab-add-form"
+                    style="
+                        position: absolute;
+                        bottom: 70px;
+                        left: 1rem; 
+                        right: 1rem;
+                        max-height: 320px;
+                        overflow-y: auto;
+                        background: rgba(10, 25, 18, 0.98); 
+                        border: 1px solid var(--color-primary); 
+                        border-radius: 12px; 
+                        box-shadow: 0 -4px 30px rgba(0,0,0,0.8);
+                        z-index: 50;
+                        padding: 1rem;
+                        margin: 0;
+                    "
+                >
+                    <div
+                        class="field-label"
+                        style="text-align:center; margin-bottom:0.5rem; color:var(--color-primary); font-weight:bold;"
+                    >
+                        JSON FORMAT GUIDE
+                    </div>
+                    <code
+                        style="display:block; font-size:0.75rem; color:#ddd; white-space:pre-wrap; background:rgba(255,255,255,0.05); padding:0.8rem; border-radius:6px; overflow-x:auto;"
+                    >
+                        {helpJson}
+                    </code>
+                    <button
+                        class="ab-btn ghost"
+                        style="width:100%; margin-top:0.8rem;"
+                        on:click={toggleHelp}>CLOSE HELP</button
+                    >
+                </div>
+            {/if}
         </div>
     </div>
 {/if}
@@ -806,8 +962,12 @@
         height: 100%;
         display: flex;
         justify-content: center;
-        align-items: center;
+        align-items: flex-start; /* KEY FIX: Align to top */
         padding: 0.5rem;
+        padding-top: 0.5rem; /* ULTRA COMPACT (was 1.5rem) */
+        padding-bottom: 0.5rem;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
 
     /* --- ANIMATIONS --- */
@@ -851,7 +1011,7 @@
 
     .grid-row {
         display: flex;
-        gap: 1.2rem;
+        gap: 0.6rem; /* TIGHT GAP (was 1.2rem) */
     }
     .asset-col {
         flex: 0.4;
@@ -909,8 +1069,8 @@
         border: none;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         color: #fff;
-        padding: 0.8rem;
-        font-size: 1rem;
+        padding: 0.5rem 0.6rem; /* COMPACT INPUTS (was 0.8rem) */
+        font-size: 0.9rem;
         outline: none;
         transition: all 0.2s;
         font-family: var(--font-mono);
@@ -938,7 +1098,7 @@
     }
 
     .hero-input {
-        font-size: 1.8rem;
+        font-size: 1.4rem; /* COMPACT HERO (was 1.8rem) */
         font-weight: bold;
         color: var(--color-primary);
     }
@@ -1231,6 +1391,7 @@
         justify-content: center;
         z-index: 200;
         padding: 1rem;
+        padding-bottom: 15vh; /* Shifts modal up from center */
         animation: fadeIn 0.2s ease-out;
     }
     @keyframes fadeIn {
@@ -1411,10 +1572,22 @@
     }
     .ab-footer {
         display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
+        justify-content: space-between; /* Split left/right */
+        align-items: center;
         padding: 1rem 1.2rem;
         border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .ab-footer-left,
+    .ab-footer-right {
+        display: flex;
+        gap: 0.8rem;
+    }
+    .help-btn {
+        width: 30px;
+        padding-left: 0;
+        padding-right: 0;
+        text-align: center;
+        border-radius: 50%;
     }
     .ab-btn {
         background: transparent;
@@ -1516,9 +1689,9 @@
     }
 
     .utxo-control {
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem; /* TIGHT MARGIN */
         background: rgba(0, 255, 65, 0.05);
-        padding: 0.5rem;
+        padding: 0.2rem 0.5rem; /* SLIM PADDING */
         border-radius: 4px;
         border-left: 2px solid var(--color-primary);
     }
@@ -1616,5 +1789,67 @@
         color: #888;
         font-size: 0.8rem;
         font-weight: bold;
+    }
+
+    .ab-icon-btn {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #ddd;
+        font-size: 1.2rem;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    .ab-icon-btn:hover {
+        border-color: var(--color-primary);
+        color: #fff;
+        background: rgba(0, 255, 65, 0.1);
+    }
+
+    /* === RESPONSIVE DESIGN === */
+    @media (max-width: 700px) {
+        .grid-row {
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+        .asset-col,
+        .amount-col {
+            flex: 1;
+        }
+        .slab-header {
+            flex-direction: column;
+            gap: 0.8rem;
+            align-items: flex-start;
+        }
+        .header-left {
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .balance-display {
+            text-align: left;
+        }
+    }
+
+    @media (max-height: 700px) {
+        .view-hud {
+            padding: 0.3rem;
+            padding-top: 0.3rem;
+        }
+        .slab-body {
+            padding: 0.8rem 1rem;
+            gap: 0.8rem;
+        }
+        .slab-footer {
+            padding: 0.8rem 1rem;
+        }
+        .btn-send-hero {
+            padding: 0.8rem 1.5rem;
+            font-size: 0.85rem;
+        }
     }
 </style>

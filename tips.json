@@ -1,0 +1,26 @@
+[
+  {
+    "height": 275027,
+    "hash": "0000000b1f4b6efb7cc6b4d55ad0ec63ac20eb908cefcc68bb148b9459456e1f",
+    "branchlen": 10027,
+    "status": "headers-only"
+  },
+  {
+    "height": 273285,
+    "hash": "0000000136323d39c3bd50078f1bb75a58907fa5cd780ba7036d937bc7fac82d",
+    "branchlen": 8285,
+    "status": "headers-only"
+  },
+  {
+    "height": 272969,
+    "hash": "00000000c40f4104c0c5d0fa5b661ff2f07c9d38fb55aed8028c3a6e992001cd",
+    "branchlen": 7969,
+    "status": "headers-only"
+  },
+  {
+    "height": 269903,
+    "hash": "000000004223263f7c9a52c0eac59b2eb1871e737bbd57cf93c01bb3232f84cd",
+    "branchlen": 0,
+    "status": "active"
+  }
+]

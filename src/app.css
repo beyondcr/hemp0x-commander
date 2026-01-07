@@ -52,6 +52,7 @@ body {
   background-color: var(--bg-void);
   color: var(--color-highlight);
   font-family: var(--font-ui);
+  /* GLOBAL SCALING STRATEGY */
   font-size: 13px;
   overflow: hidden;
   /* THE "NO SCROLL" RULE */
@@ -59,6 +60,18 @@ body {
   width: 100vw;
   user-select: none;
   /* App feel */
+}
+
+/* Smart Scaling for Small Windows */
+@media (max-height: 800px) {
+  body {
+    font-size: 12px; /* Scale down UI */
+  }
+}
+@media (max-height: 600px) {
+  body {
+    font-size: 11px; /* Mini mode */
+  }
 }
 
 /* --- UTILITIES --- */

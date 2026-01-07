@@ -92,6 +92,47 @@ struct UtxoItem {
   safe: Option<bool>,
 }
 
+#[derive(Serialize, serde::Deserialize, Clone)]
+struct AddressBookEntry {
+  label: String,
+  address: String,
+  locked: bool,
+  date: u64,
+}
+
+fn address_book_path() -> Result<PathBuf, String> {
+  Ok(data_dir()?.join("address_book.json"))
+}
+
+#[tauri::command]
+fn load_address_book() -> Result<Vec<AddressBookEntry>, String> {
+  let path = address_book_path()?;
+  if !path.exists() {
+    return Ok(Vec::new());
+  }
+  let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+  let entries: Vec<AddressBookEntry> = serde_json::from_str(&content).unwrap_or_default();
+  Ok(entries)
+}
+
+#[tauri::command]
+fn save_address_book(entries: Vec<AddressBookEntry>) -> Result<(), String> {
+  let path = address_book_path()?;
+  let content = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
+  fs::write(&path, content).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+  fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_text_file(path: String, content: String) -> Result<(), String> {
+  fs::write(path, content).map_err(|e| e.to_string())
+}
+
 fn data_dir() -> Result<PathBuf, String> {
   if cfg!(windows) {
     let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA not set".to_string())?;
@@ -219,7 +260,7 @@ fn ensure_config() -> Result<PathBuf, String> {
     let rpc_pass = Uuid::new_v4();
     let daemon_flag = "0";
     let content = format!(
-      "rpcuser={}\nrpcpassword={}\nserver=1\ndaemon={}\naddnode=154.38.164.123:42069\naddnode=144.202.3.215:42069\n",
+      "rpcuser={}\nrpcpassword={}\nserver=1\ndaemon={}\naddnode=154.38.164.123:42069\naddnode=147.93.185.184:42069\n",
       rpc_user, rpc_pass, daemon_flag
     );
     fs::write(&cfg, content).map_err(|e| e.to_string())?;
@@ -250,6 +291,12 @@ fn run_cli(args: &[String]) -> Result<String, String> {
   if !cli_path.exists() {
     return Err(format!("CLI not found at {}", cli));
   }
+  
+  // Parse config to detect network mode
+  let config = parse_config(&cfg)?;
+  let is_regtest = config.get("regtest").map(|v| v == "1").unwrap_or(false);
+  let is_testnet = config.get("testnet").map(|v| v == "1").unwrap_or(false);
+  
   let mut cmd = Command::new(&cli);
   if let Some(parent) = cli_path.parent() {
     cmd.current_dir(parent);
@@ -258,6 +305,14 @@ fn run_cli(args: &[String]) -> Result<String, String> {
   {
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
   }
+  
+  // Add network mode flags BEFORE config and datadir
+  if is_regtest {
+    cmd.arg("-regtest");
+  } else if is_testnet {
+    cmd.arg("-testnet");
+  }
+  
   let output = cmd
     .arg(format!("-conf={}", cfg.to_string_lossy()))
     .arg(format!("-datadir={}", dir.to_string_lossy()))
@@ -907,11 +962,237 @@ fn issue_asset(name: String, qty: String, units: u8, reissuable: bool) -> Result
   ])
 }
 
+// Minimum required version
+const MIN_VERSION: (u32, u32, u32) = (4, 7, 0);
+
+fn parse_version(subver: &str) -> Option<(u32, u32, u32)> {
+  // Parse "/Hemp0x:4.7.0/" format
+  let stripped = subver.trim_matches('/');
+  if let Some(ver_str) = stripped.strip_prefix("Hemp0x:") {
+    let parts: Vec<&str> = ver_str.split('.').collect();
+    if parts.len() >= 3 {
+      let major = parts[0].parse().ok()?;
+      let minor = parts[1].parse().ok()?;
+      let patch = parts[2].parse().ok()?;
+      return Some((major, minor, patch));
+    }
+  }
+  None
+}
+
+fn version_is_old(subver: &str) -> bool {
+  if let Some((major, minor, patch)) = parse_version(subver) {
+    // Compare versions
+    if major < MIN_VERSION.0 { return true; }
+    if major > MIN_VERSION.0 { return false; }
+    if minor < MIN_VERSION.1 { return true; }
+    if minor > MIN_VERSION.1 { return false; }
+    if patch < MIN_VERSION.2 { return true; }
+    return false;
+  }
+  // If can't parse, consider it old (non-Hemp0x client)
+  true
+}
+
+#[derive(Serialize)]
+struct BanResult {
+  banned_count: u32,
+  banned_peers: Vec<String>,
+}
+
+#[tauri::command]
+fn ban_old_peers() -> Result<BanResult, String> {
+  ensure_config()?;
+  
+  let raw = run_cli(&[String::from("getpeerinfo")])?;
+  let peers: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+  
+  let mut banned_count = 0u32;
+  let mut banned_peers = Vec::new();
+  
+  if let Some(arr) = peers.as_array() {
+    for peer in arr {
+      let subver = peer.get("subver").and_then(|v| v.as_str()).unwrap_or("");
+      let addr = peer.get("addr").and_then(|v| v.as_str()).unwrap_or("");
+      
+      if !subver.is_empty() && version_is_old(subver) {
+        let ip = addr.split(':').next().unwrap_or(addr);
+        if !ip.is_empty() {
+          if run_cli(&[
+            String::from("setban"),
+            ip.to_string(),
+            String::from("add"),
+            String::from("86400"),
+          ]).is_ok() {
+            banned_count += 1;
+            banned_peers.push(format!("{} ({})", ip, subver));
+          }
+        }
+      }
+    }
+  }
+  
+  Ok(BanResult { banned_count, banned_peers })
+}
+
+#[derive(Serialize)]
+struct BanEntry {
+  address: String,
+  banned_until: String,
+  ban_reason: String,
+}
+
+#[tauri::command]
+fn get_ban_list() -> Result<Vec<BanEntry>, String> {
+  ensure_config()?;
+  let raw = run_cli(&[String::from("listbanned")])?;
+  let bans: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+  
+  let mut entries = Vec::new();
+  if let Some(arr) = bans.as_array() {
+    for ban in arr {
+      let address = ban.get("address").and_then(|v| v.as_str()).unwrap_or("").to_string();
+      let banned_until = ban.get("banned_until").and_then(|v| v.as_i64()).unwrap_or(0);
+      let ban_reason = ban.get("ban_reason").and_then(|v| v.as_str()).unwrap_or("manual").to_string();
+      
+      // Convert timestamp to readable format
+      let dt = chrono::Local.timestamp_opt(banned_until, 0)
+        .single()
+        .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+      
+      entries.push(BanEntry {
+        address,
+        banned_until: dt,
+        ban_reason,
+      });
+    }
+  }
+  Ok(entries)
+}
+
+#[tauri::command]
+fn unban_peer(address: String) -> Result<String, String> {
+  ensure_config()?;
+  run_cli(&[String::from("setban"), address, String::from("remove")])
+}
+
+#[tauri::command]
+fn dump_priv_key(address: String) -> Result<String, String> {
+  ensure_config()?;
+  run_cli(&[String::from("dumpprivkey"), address])
+}
+
+#[tauri::command]
+fn import_priv_key(priv_key: String, label: String, rescan: bool) -> Result<String, String> {
+  ensure_config()?;
+  let rescan_flag = if rescan { "true" } else { "false" };
+  // importprivkey "privkey" ( "label" ) ( rescan )
+  run_cli(&[
+    String::from("importprivkey"),
+    priv_key,
+    label,
+    rescan_flag.to_string(),
+  ])
+}
+
 #[tauri::command]
 fn wallet_encrypt(password: String) -> Result<String, String> {
+  // Implementation preserved...
   ensure_config()?;
   run_cli(&[String::from("encryptwallet"), password])
 }
+
+// --- NETWORK TOOLS ---
+
+#[derive(Serialize)]
+struct NetworkInfo {
+  version: u64,
+  subversion: String,
+  protocolversion: u64,
+  connections: u64,
+  localaddresses: Vec<String>,
+  full_ip: String, // Heuristic: first local address or empty
+}
+
+#[tauri::command]
+fn get_net_info() -> Result<NetworkInfo, String> {
+  ensure_config()?;
+  let raw = run_cli(&[String::from("getnetworkinfo")])?;
+  let info: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+
+  let version = info.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+  let subversion = info.get("subversion").and_then(|v| v.as_str()).unwrap_or("").to_string();
+  let protocolversion = info.get("protocolversion").and_then(|v| v.as_u64()).unwrap_or(0);
+  let connections = info.get("connections").and_then(|v| v.as_u64()).unwrap_or(0);
+  
+  let mut localaddresses = Vec::new();
+  let mut full_ip = String::new();
+
+  if let Some(arr) = info.get("localaddresses").and_then(|v| v.as_array()) {
+      for addr in arr {
+          if let Some(a) = addr.get("address").and_then(|v| v.as_str()) {
+              localaddresses.push(a.to_string());
+              if full_ip.is_empty() { full_ip = a.to_string(); }
+          }
+      }
+  }
+
+  Ok(NetworkInfo {
+      version,
+      subversion,
+      protocolversion,
+      connections,
+      localaddresses,
+      full_ip,
+  })
+}
+
+#[tauri::command]
+fn execute_ping(host: String) -> Result<String, String> {
+  use std::process::Command;
+  
+  let mut cmd;
+  #[cfg(windows)]
+  {
+      cmd = Command::new("ping");
+      cmd.args(["-n", "3", &host]);
+  }
+  #[cfg(unix)]
+  {
+      cmd = Command::new("ping");
+      cmd.args(["-c", "3", &host]);
+  }
+
+  let output = cmd.output().map_err(|e| e.to_string())?;
+  
+  if output.status.success() {
+      Ok(String::from_utf8_lossy(&output.stdout).to_string())
+  } else {
+      let err_out = String::from_utf8_lossy(&output.stderr).to_string();
+      let std_out = String::from_utf8_lossy(&output.stdout).to_string();
+      // Combine for clarity
+      Err(format!("Ping failed:\n{}\n{}", std_out, err_out))
+  }
+}
+
+#[tauri::command]
+fn check_open_port(host: String, port: u16) -> Result<bool, String> {
+  use std::net::{TcpStream, ToSocketAddrs};
+  use std::time::Duration;
+
+  let addr_str = format!("{}:{}", host, port);
+  // Resolve hostnames (like hemp0x.com) to IPs
+  let addrs = addr_str.to_socket_addrs().map_err(|e| format!("DNS/Parse Error: {}", e))?;
+
+  for addr in addrs {
+      if TcpStream::connect_timeout(&addr, Duration::from_secs(3)).is_ok() {
+          return Ok(true);
+      }
+  }
+  Ok(false)
+}
+
 
 #[tauri::command]
 fn wallet_unlock(password: String, duration: u64) -> Result<String, String> {
@@ -1368,12 +1649,24 @@ pub fn run() {
       list_assets,
       transfer_asset,
       issue_asset,
+      ban_old_peers,
+      get_ban_list,
+      unban_peer,
+      dump_priv_key,
+      import_priv_key,
       wallet_encrypt,
-        wallet_unlock,
-        wallet_lock,
-        run_shell_command,
-        shell_autocomplete,
-        run_cli_command,
+      wallet_unlock,
+      wallet_lock,
+      change_wallet_password,
+      create_new_wallet,
+      read_text_file,
+      write_text_file,
+      get_net_info,
+      execute_ping,
+      check_open_port,
+      run_shell_command,
+      shell_autocomplete,
+      run_cli_command,
       read_config,
       write_config,
       read_log,
@@ -1381,15 +1674,15 @@ pub fn run() {
       backup_wallet,
       backup_wallet_to,
       restore_wallet,
-      create_new_wallet,
-      change_wallet_password,
       get_data_folder_info,
       check_config_exists,
       backup_data_folder,
       backup_data_folder_to,
       create_default_config,
       get_binary_status,
-      extract_binaries
+      extract_binaries,
+      load_address_book,
+      save_address_book
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
