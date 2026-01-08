@@ -21,6 +21,9 @@
     let issueQty = "1";
     let issueUnits = "0";
     let issueReissue = true;
+    let issueType = "root"; // "root" | "sub"
+    let issueParent = ""; // Parent asset name for sub-assets
+    let issueIpfs = ""; // Optional IPFS hash
 
     // Reissue
     let reissueAsset = "";
@@ -70,12 +73,110 @@
         }
     }
 
-    function openDetail(asset) {
+    // Group assets: bundle OWNER tokens (!) with their parent TOKEN
+    $: groupedAssets = (() => {
+        const groups = new Map();
+        const owners = new Map();
+
+        // First pass: separate owners from tokens
+        for (const asset of myAssets) {
+            if (asset.name.endsWith("!")) {
+                // This is an owner token
+                const baseName = asset.name.slice(0, -1);
+                owners.set(baseName, asset);
+            } else {
+                // Regular token or sub-asset
+                groups.set(asset.name, {
+                    ...asset,
+                    hasOwner: false,
+                    ownerBalance: null,
+                    isSubAsset: asset.name.includes("/"),
+                    parentName: asset.name.includes("/")
+                        ? asset.name.split("/")[0]
+                        : null,
+                });
+            }
+        }
+
+        // Second pass: attach owners to their parent tokens
+        for (const [baseName, ownerAsset] of owners) {
+            if (groups.has(baseName)) {
+                // Parent exists, attach owner info
+                const parent = groups.get(baseName);
+                parent.hasOwner = true;
+                parent.ownerBalance = ownerAsset.balance;
+            } else {
+                // Orphan owner (no matching token visible) - show it separately
+                groups.set(ownerAsset.name, {
+                    ...ownerAsset,
+                    hasOwner: true,
+                    ownerBalance: ownerAsset.balance,
+                    isSubAsset: false,
+                    parentName: null,
+                });
+            }
+        }
+
+        return Array.from(groups.values());
+    })();
+
+    // Root assets only (for sub-asset parent selection)
+    $: rootAssets = myAssets.filter(
+        (a) =>
+            !a.name.includes("/") &&
+            !a.name.endsWith("!") &&
+            a.name === a.name.toUpperCase(), // Only uppercase root assets
+    );
+
+    // Asset metadata from getassetdata
+    let assetMetadata = null;
+    let metadataLoading = false;
+    let slideDirection = 0; // -1 = left, 1 = right, 0 = none
+
+    async function openDetail(asset) {
         selectedDetail = asset;
+        assetMetadata = null;
+        metadataLoading = true;
+
+        try {
+            // Fetch full asset data from CLI
+            const data = await core.invoke("get_asset_data", {
+                name: asset.name,
+            });
+            assetMetadata = data;
+        } catch (err) {
+            console.warn("get_asset_data error:", err);
+            // Non-fatal - just show basic info
+        }
+        metadataLoading = false;
     }
 
     function closeDetail() {
         selectedDetail = null;
+        assetMetadata = null;
+        slideDirection = 0;
+    }
+
+    function navigatePrev() {
+        if (!selectedDetail || groupedAssets.length <= 1) return;
+        const currentIdx = groupedAssets.findIndex(
+            (a) => a.name === selectedDetail.name,
+        );
+        const prevIdx =
+            currentIdx <= 0 ? groupedAssets.length - 1 : currentIdx - 1;
+        slideDirection = -1;
+        openDetail(groupedAssets[prevIdx]);
+    }
+
+    function navigateNext() {
+        if (!selectedDetail || groupedAssets.length <= 1) return;
+        const currentIdx = groupedAssets.findIndex(
+            (a) => a.name === selectedDetail.name,
+        );
+        const nextIdx =
+            currentIdx >= groupedAssets.length - 1 ? 0 : currentIdx + 1;
+        slideDirection = 1;
+        openDetail(groupedAssets[nextIdx]);
     }
 
     function goToTransfer(assetName) {
@@ -103,11 +204,24 @@
             status = "Name and Qty required.";
             return;
         }
+        if (issueType === "sub" && !issueParent) {
+            status = "Parent asset required for sub-asset.";
+            return;
+        }
+
+        // Build full asset name
+        let fullName = issueName.toUpperCase();
+        if (issueType === "sub") {
+            fullName = `${issueParent}/${issueName.toUpperCase()}`;
+        }
+
         confirmPayload = {
-            name: issueName.toUpperCase(),
+            name: fullName,
             qty: issueQty,
             units: issueUnits,
             reissuable: issueReissue,
+            ipfs: issueIpfs || null,
+            type: issueType,
         };
         confirmType = "ISSUE";
         confirmOpen = true;
@@ -146,10 +260,13 @@
                     qty: String(confirmPayload.qty),
                     units: Number(confirmPayload.units),
                     reissuable: confirmPayload.reissuable,
+                    ipfs: confirmPayload.ipfs || "",
                 });
-                status = `Issued! TXID: ${txid.slice(0, 16)}...`;
+                status = `${confirmPayload.type === "sub" ? "Sub-asset" : "Asset"} created! TXID: ${txid.slice(0, 16)}...`;
                 issueName = "";
                 issueQty = "1";
+                issueIpfs = "";
+                if (issueType === "sub") issueParent = "";
             } else if (confirmType === "REISSUE") {
                 txid = await core
                     .invoke("reissue_asset", {
@@ -220,9 +337,11 @@
                     <!-- ═══════════════ MY ASSETS ═══════════════ -->
                     {#if activeTab === "MY_ASSETS"}
                         <div class="asset-grid">
-                            {#each myAssets as asset, i}
+                            {#each groupedAssets as asset, i}
                                 <div
                                     class="asset-card glass-card"
+                                    class:has-owner={asset.hasOwner}
+                                    class:is-sub-asset={asset.isSubAsset}
                                     role="button"
                                     tabindex="0"
                                     on:click={() => openDetail(asset)}
@@ -235,6 +354,22 @@
                                     }}
                                 >
                                     <div class="card-glow"></div>
+                                    {#if asset.hasOwner}
+                                        <div
+                                            class="owner-badge"
+                                            title="You own this asset (can reissue)"
+                                        >
+                                            👑
+                                        </div>
+                                    {/if}
+                                    {#if asset.isSubAsset}
+                                        <div
+                                            class="sub-badge"
+                                            title="Sub-asset of {asset.parentName}"
+                                        >
+                                            ↳
+                                        </div>
+                                    {/if}
                                     <div class="card-content">
                                         <div class="asset-name">
                                             {asset.name}
@@ -244,7 +379,9 @@
                                         </div>
                                         <div class="asset-meta">
                                             <span class="asset-type"
-                                                >{asset.type}</span
+                                                >{asset.hasOwner
+                                                    ? "OWNER"
+                                                    : asset.type}</span
                                             >
                                             <button
                                                 class="quick-transfer"
@@ -258,7 +395,7 @@
                                     </div>
                                 </div>
                             {/each}
-                            {#if myAssets.length === 0}
+                            {#if groupedAssets.length === 0}
                                 <div class="empty-state">
                                     <div class="empty-icon">◈</div>
                                     <div class="empty-text">
@@ -325,20 +462,84 @@
                     {:else if activeTab === "ISSUE"}
                         <div class="form-panel glass-form">
                             <div class="form-grid">
-                                <div class="form-group wide">
-                                    <label for="issue-name">ASSET NAME</label>
+                                <!-- Asset Type Toggle -->
+                                <div class="form-group full-width">
+                                    <span class="label-text">ASSET TYPE</span>
+                                    <div class="toggle-group">
+                                        <button
+                                            class="toggle-btn"
+                                            class:active={issueType === "root"}
+                                            on:click={() =>
+                                                (issueType = "root")}
+                                            >ROOT ASSET</button
+                                        >
+                                        <button
+                                            class="toggle-btn"
+                                            class:active={issueType === "sub"}
+                                            on:click={() => (issueType = "sub")}
+                                            >SUB-ASSET</button
+                                        >
+                                    </div>
+                                </div>
+
+                                <!-- Parent Asset (only for sub-assets) -->
+                                {#if issueType === "sub"}
+                                    <div class="form-group wide">
+                                        <label for="issue-parent"
+                                            >PARENT ASSET</label
+                                        >
+                                        <select
+                                            id="issue-parent"
+                                            bind:value={issueParent}
+                                            class="glass-input"
+                                        >
+                                            <option value=""
+                                                >Select parent...</option
+                                            >
+                                            {#each rootAssets as asset}
+                                                <option value={asset.name}
+                                                    >{asset.name}</option
+                                                >
+                                            {/each}
+                                        </select>
+                                    </div>
+                                {/if}
+
+                                <div
+                                    class="form-group"
+                                    class:wide={issueType === "root"}
+                                >
+                                    <label for="issue-name">
+                                        {issueType === "sub"
+                                            ? "SUB-ASSET NAME"
+                                            : "ASSET NAME"}
+                                    </label>
                                     <input
                                         id="issue-name"
                                         type="text"
                                         class="glass-input mono"
-                                        placeholder="MY_TOKEN"
+                                        placeholder={issueType === "sub"
+                                            ? "CHILD"
+                                            : "MY_TOKEN"}
                                         bind:value={issueName}
                                     />
+                                    {#if issueType === "sub" && issueParent}
+                                        <div class="input-hint">
+                                            Will create: {issueParent}/{issueName ||
+                                                "..."}
+                                        </div>
+                                    {/if}
                                 </div>
+
                                 <div class="form-group narrow">
                                     <span class="label-text">COST</span>
-                                    <div class="static-value">0.25 HEMP</div>
+                                    <div class="static-value">
+                                        {issueType === "sub"
+                                            ? "100 HEMP"
+                                            : "500 HEMP"}
+                                    </div>
                                 </div>
+
                                 <div class="form-group">
                                     <label for="issue-qty">QUANTITY</label>
                                     <input
@@ -349,8 +550,9 @@
                                         bind:value={issueQty}
                                     />
                                 </div>
+
                                 <div class="form-group tiny">
-                                    <label for="issue-units">UNITS</label>
+                                    <label for="issue-units">DECIMALS</label>
                                     <input
                                         id="issue-units"
                                         type="number"
@@ -360,6 +562,25 @@
                                         bind:value={issueUnits}
                                     />
                                 </div>
+
+                                <!-- IPFS Hash (optional) -->
+                                <div class="form-group wide">
+                                    <label for="issue-ipfs"
+                                        >IPFS HASH (Optional)</label
+                                    >
+                                    <input
+                                        id="issue-ipfs"
+                                        type="text"
+                                        class="glass-input mono"
+                                        placeholder="QmYwAPJ..."
+                                        bind:value={issueIpfs}
+                                    />
+                                    <div class="input-hint">
+                                        Attach metadata document or image via
+                                        IPFS
+                                    </div>
+                                </div>
+
                                 <div class="form-group checkbox-group">
                                     <label class="checkbox-wrap">
                                         <input
@@ -377,10 +598,13 @@
                                 <button
                                     class="neon-btn"
                                     on:click={initiateIssue}
-                                    disabled={!nodeOnline}
+                                    disabled={!nodeOnline ||
+                                        (issueType === "sub" && !issueParent)}
                                 >
                                     <span class="btn-glow"></span>
-                                    MINT ASSET
+                                    {issueType === "sub"
+                                        ? "CREATE SUB-ASSET"
+                                        : "MINT ASSET"}
                                 </button>
                             </div>
                         </div>
@@ -472,69 +696,160 @@
             role="button"
             tabindex="0"
         >
-            <div
-                class="detail-modal glass-modal"
-                transition:scale={{ start: 0.95, duration: 200 }}
-                on:click|stopPropagation
-                on:keydown|stopPropagation
-                role="dialog"
-                aria-modal="true"
-                tabindex="-1"
-            >
-                <button class="modal-close" on:click={closeDetail}>×</button>
+            <div class="modal-container">
+                <!-- Navigation Arrows (outside card) -->
+                {#if groupedAssets.length > 1}
+                    <button
+                        class="nav-arrow nav-prev"
+                        on:click|stopPropagation={navigatePrev}
+                        title="Previous Asset">«</button
+                    >
+                {/if}
 
-                <div class="detail-header">
-                    <div class="detail-icon">◈</div>
-                    <div class="detail-title">{selectedDetail.name}</div>
-                </div>
+                {#key selectedDetail?.name}
+                    <div
+                        class="detail-modal glass-modal"
+                        in:fly={{ x: slideDirection * 40, duration: 180 }}
+                        out:fly={{
+                            x: slideDirection * -40,
+                            duration: 120,
+                            opacity: 0,
+                        }}
+                        on:click|stopPropagation
+                        on:keydown|stopPropagation
+                        role="dialog"
+                        aria-modal="true"
+                        tabindex="-1"
+                    >
+                        <button class="modal-close" on:click={closeDetail}
+                            >×</button
+                        >
 
-                <div class="detail-body">
-                    <div class="detail-grid">
-                        <div class="detail-stat">
-                            <div class="stat-label">BALANCE</div>
-                            <div class="stat-value neon-text">
-                                {selectedDetail.balance}
+                        <div class="detail-header">
+                            <div class="detail-icon">◈</div>
+                            <div class="detail-title">
+                                {selectedDetail.name}
                             </div>
                         </div>
-                        <div class="detail-stat">
-                            <div class="stat-label">TYPE</div>
-                            <div class="stat-value">
-                                {selectedDetail.type || "STANDARD"}
+
+                        <div class="detail-body">
+                            <div class="detail-grid">
+                                <div class="detail-stat">
+                                    <div class="stat-label">YOUR BALANCE</div>
+                                    <div class="stat-value neon-text">
+                                        {selectedDetail.balance}
+                                    </div>
+                                </div>
+                                <div class="detail-stat">
+                                    <div class="stat-label">TYPE</div>
+                                    <div class="stat-value">
+                                        {selectedDetail.isSubAsset
+                                            ? "SUB-ASSET"
+                                            : selectedDetail.type || "STANDARD"}
+                                    </div>
+                                </div>
+                                <div class="detail-stat">
+                                    <div class="stat-label">ADMIN RIGHTS</div>
+                                    <div
+                                        class="stat-value"
+                                        class:owner-yes={selectedDetail.hasOwner}
+                                    >
+                                        {selectedDetail.hasOwner
+                                            ? "👑 CAN REISSUE"
+                                            : "HOLDER ONLY"}
+                                    </div>
+                                </div>
+                                <div class="detail-stat">
+                                    <div class="stat-label">DECIMALS</div>
+                                    <div class="stat-value">
+                                        {assetMetadata?.units ??
+                                            selectedDetail.units ??
+                                            0}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div class="detail-stat">
-                            <div class="stat-label">REISSUABLE</div>
-                            <div class="stat-value">
-                                {selectedDetail.reissuable ? "YES" : "NO"}
-                            </div>
-                        </div>
-                        <div class="detail-stat">
-                            <div class="stat-label">UNITS</div>
-                            <div class="stat-value">
-                                {selectedDetail.units ?? 0}
+
+                            <!-- Enhanced Metadata Section -->
+                            {#if metadataLoading}
+                                <div class="metadata-section">
+                                    <div class="meta-loading">
+                                        Loading metadata...
+                                    </div>
+                                </div>
+                            {:else if assetMetadata}
+                                <div class="metadata-section">
+                                    <div class="meta-row">
+                                        <span class="meta-label"
+                                            >TOTAL SUPPLY</span
+                                        >
+                                        <span class="meta-value"
+                                            >{assetMetadata.amount.toLocaleString()}</span
+                                        >
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-label"
+                                            >REISSUABLE</span
+                                        >
+                                        <span
+                                            class="meta-value"
+                                            class:yes={assetMetadata.reissuable}
+                                        >
+                                            {assetMetadata.reissuable
+                                                ? "YES"
+                                                : "NO"}
+                                        </span>
+                                    </div>
+                                    {#if assetMetadata.has_ipfs && assetMetadata.ipfs_hash}
+                                        <div class="meta-row">
+                                            <span class="meta-label">IPFS</span>
+                                            <span
+                                                class="meta-value mono ipfs-hash"
+                                                >{assetMetadata.ipfs_hash}</span
+                                            >
+                                        </div>
+                                    {/if}
+                                    <div class="meta-row">
+                                        <span class="meta-label"
+                                            >CREATED AT BLOCK</span
+                                        >
+                                        <span class="meta-value"
+                                            >{assetMetadata.block_height.toLocaleString()}</span
+                                        >
+                                    </div>
+                                </div>
+                            {/if}
+
+                            <div class="detail-actions">
+                                <button
+                                    class="action-btn primary"
+                                    on:click={() =>
+                                        goToTransfer(selectedDetail.name)}
+                                >
+                                    <span class="action-icon">→</span> TRANSFER
+                                </button>
+                                <button
+                                    class="action-btn"
+                                    on:click={() => {
+                                        reissueAsset = selectedDetail.name;
+                                        selectedDetail = null;
+                                        activeTab = "REISSUE";
+                                    }}
+                                >
+                                    <span class="action-icon">↻</span> REISSUE
+                                </button>
                             </div>
                         </div>
                     </div>
+                {/key}
 
-                    <div class="detail-actions">
-                        <button
-                            class="action-btn primary"
-                            on:click={() => goToTransfer(selectedDetail.name)}
-                        >
-                            <span class="action-icon">→</span> TRANSFER
-                        </button>
-                        <button
-                            class="action-btn"
-                            on:click={() => {
-                                reissueAsset = selectedDetail.name;
-                                selectedDetail = null;
-                                activeTab = "REISSUE";
-                            }}
-                        >
-                            <span class="action-icon">↻</span> REISSUE
-                        </button>
-                    </div>
-                </div>
+                <!-- Right Arrow (outside card) -->
+                {#if groupedAssets.length > 1}
+                    <button
+                        class="nav-arrow nav-next"
+                        on:click|stopPropagation={navigateNext}
+                        title="Next Asset">»</button
+                    >
+                {/if}
             </div>
         </div>
     {/if}
@@ -714,6 +1029,42 @@
         position: relative;
         z-index: 1;
     }
+
+    /* Owner Badge - Crown icon for owned assets */
+    .owner-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 1rem;
+        z-index: 2;
+        filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.6));
+    }
+
+    /* Sub-asset indicator */
+    .sub-badge {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        font-size: 0.8rem;
+        color: #888;
+        z-index: 2;
+    }
+
+    /* Highlight cards with owner tokens */
+    .asset-card.has-owner {
+        border-color: rgba(255, 215, 0, 0.3);
+    }
+    .asset-card.has-owner:hover {
+        border-color: rgba(255, 215, 0, 0.5);
+        box-shadow:
+            0 8px 30px rgba(0, 0, 0, 0.4),
+            0 0 20px rgba(255, 215, 0, 0.15);
+    }
+
+    /* Sub-asset indent styling */
+    .asset-card.is-sub-asset {
+        border-left: 3px solid rgba(0, 255, 65, 0.3);
+    }
     .asset-name {
         font-size: 0.9rem;
         font-weight: 700;
@@ -782,6 +1133,55 @@
         letter-spacing: 1px;
     }
 
+    .metadata-section {
+        margin-top: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.25rem 0.75rem;
+    }
+    .meta-loading {
+        color: #555;
+        font-size: 0.7rem;
+        text-align: center;
+        letter-spacing: 1px;
+        grid-column: 1 / -1;
+    }
+    .meta-row {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.25rem 0;
+    }
+    .meta-row:last-child {
+        border-bottom: none;
+    }
+    .meta-label {
+        font-size: 0.45rem;
+        color: #555;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.1rem;
+    }
+    .meta-value {
+        font-size: 0.7rem;
+        color: #aaa;
+    }
+    .meta-value.yes {
+        color: var(--color-primary);
+    }
+    .meta-value.mono {
+        font-family: var(--font-mono);
+    }
+    .ipfs-hash {
+        font-size: 0.55rem;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     /* ═══════════════ FORMS ═══════════════ */
     .form-panel {
         max-width: 700px;
@@ -804,6 +1204,9 @@
     .form-group.full {
         grid-column: span 12;
     }
+    .form-group.full-width {
+        grid-column: span 12;
+    }
     .form-group.wide {
         grid-column: span 8;
     }
@@ -813,12 +1216,49 @@
     .form-group.tiny {
         grid-column: span 2;
     }
-    .form-group:not(.full):not(.wide):not(.narrow):not(.tiny) {
+    .form-group:not(.full):not(.full-width):not(.wide):not(.narrow):not(.tiny) {
         grid-column: span 6;
     }
     .form-group.checkbox-group {
         grid-column: span 4;
         justify-content: center;
+    }
+
+    /* Toggle Buttons */
+    .toggle-group {
+        display: flex;
+        gap: 0;
+        border: 1px solid rgba(0, 255, 65, 0.2);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .toggle-btn {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #555;
+        padding: 0.7rem 1rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 1px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .toggle-btn:hover:not(.active) {
+        color: #888;
+        background: rgba(255, 255, 255, 0.03);
+    }
+    .toggle-btn.active {
+        background: var(--color-primary);
+        color: #000;
+    }
+
+    /* Input Hints */
+    .input-hint {
+        font-size: 0.6rem;
+        color: #555;
+        letter-spacing: 0.5px;
+        margin-top: 0.2rem;
     }
 
     label,
@@ -914,6 +1354,12 @@
     }
     .checkbox-wrap input:checked ~ .checkbox-text {
         color: #fff;
+    }
+
+    /* Owner status highlight in detail modal */
+    .owner-yes {
+        color: #ffd700 !important;
+        text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
     }
 
     .form-footer {
@@ -1033,10 +1479,40 @@
         overflow: hidden;
     }
 
+    /* Modal Container (holds card + arrows) */
+    .modal-container {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    /* Navigation Arrows (outside card) */
+    .nav-arrow {
+        flex-shrink: 0;
+        background: transparent;
+        border: none;
+        color: var(--color-primary);
+        font-size: 1.8rem;
+        font-weight: 300;
+        cursor: pointer;
+        transition: all 0.2s;
+        padding: 0.5rem;
+        opacity: 0.5;
+        text-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+    }
+    .nav-arrow:hover {
+        opacity: 1;
+        text-shadow:
+            0 0 10px var(--color-primary),
+            0 0 20px var(--color-primary),
+            0 0 30px rgba(0, 255, 65, 0.5);
+        transform: scale(1.2);
+    }
+
     /* Detail Modal */
     .detail-modal {
         width: 100%;
-        max-width: 450px;
+        max-width: 550px;
         position: relative;
     }
     .modal-close {
@@ -1061,46 +1537,49 @@
         background: rgba(255, 255, 255, 0.1);
     }
     .detail-header {
-        padding: 2rem 2rem 1.5rem;
+        padding: 1rem 2rem 0.8rem;
         text-align: center;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
     }
     .detail-icon {
-        font-size: 2.5rem;
+        font-size: 1.5rem;
         color: var(--color-primary);
         text-shadow: 0 0 30px rgba(0, 255, 65, 0.5);
-        margin-bottom: 0.5rem;
     }
     .detail-title {
-        font-size: 1.3rem;
+        font-size: 1.2rem;
         font-weight: 700;
         color: #fff;
         letter-spacing: 2px;
     }
     .detail-body {
-        padding: 1.5rem 2rem 2rem;
+        padding: 1rem 1.5rem 1.5rem;
     }
     .detail-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-        margin-bottom: 2rem;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
     }
     .detail-stat {
         background: rgba(0, 0, 0, 0.3);
         border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
-        padding: 1rem;
+        border-radius: 8px;
+        padding: 0.6rem 0.4rem;
         text-align: center;
     }
     .stat-label {
-        font-size: 0.6rem;
+        font-size: 0.5rem;
         color: #555;
-        letter-spacing: 1px;
-        margin-bottom: 0.3rem;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.2rem;
     }
     .stat-value {
-        font-size: 1rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: #fff;
         font-family: var(--font-mono);

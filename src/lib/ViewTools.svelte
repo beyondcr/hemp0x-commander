@@ -110,6 +110,11 @@
         consoleHistory = [...consoleHistory, line];
       }
       historyIndex = consoleHistory.length;
+
+      // Show processing overlay for long-running commands
+      isProcessing = true;
+      processingMessage = "Running Command...";
+
       let res;
       const prompt = shellMode ? "$" : ">";
       appendOutput(`${prompt} ${line}`);
@@ -124,11 +129,14 @@
           args: cmdArgs,
         });
       }
+
+      isProcessing = false;
       appendOutput(res || "(no output)");
       showToast("Command Executed", "success");
       cmdLine = "";
       selectedCommand = ""; // Reset dropdown so re-selecting same command works
     } catch (err) {
+      isProcessing = false;
       appendOutput(`Error: ${err}`);
       showToast("Command Failed", "error");
     }
@@ -221,24 +229,14 @@
   async function openDataDir() {
     if (!tauriReady) return;
     try {
-      const config = await core.invoke("init_config");
-      const path = config.data_dir;
-
-      // Use dialog plugin to open a folder browser starting at the data dir
-      // This works on Linux where native file managers fail
-      await open({
-        title: "Hemp0x Data Folder",
-        directory: true,
-        defaultPath: path,
-        multiple: false,
-      });
+      await core.invoke("open_data_dir");
     } catch (err) {
-      // If dialog cancelled or fails, show path for manual navigation
+      // Fallback: show path for manual navigation
       try {
         const config = await core.invoke("init_config");
         showToast(`📂 Path: ${config.data_dir}`, "info");
       } catch {
-        showToast("Failed to get path", "error");
+        showToast("Failed to open folder", "error");
       }
     }
   }
@@ -292,6 +290,89 @@
     } catch (err) {
       showToast(`Failed: ${err}`, "error");
     }
+  }
+
+  let snapshotInstalling = false;
+  let snapshotModalOpen = false;
+  let snapshotFilePath = "";
+
+  async function installSnapshot() {
+    if (!tauriReady || snapshotInstalling) return;
+
+    // File picker for .7z files
+    const selected = await open({
+      title: "Select Snapshot Archive",
+      filters: [{ name: "7-Zip Archive", extensions: ["7z"] }],
+      multiple: false,
+    });
+
+    if (!selected) return;
+
+    // Store selected path and show custom modal
+    snapshotFilePath = selected;
+    snapshotModalOpen = true;
+  }
+
+  async function confirmSnapshotInstall() {
+    snapshotModalOpen = false;
+    snapshotInstalling = true;
+    isProcessing = true;
+
+    try {
+      // Step 1: Stop the node if running
+      processingMessage = "Stopping node...";
+      try {
+        await core.invoke("stop_node");
+
+        // Wait and verify node is stopped (check up to 10 times)
+        for (let i = 0; i < 10; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          try {
+            await core.invoke("get_info");
+            // Still running, wait more
+            processingMessage = `Waiting for node to stop... (${10 - i}s)`;
+          } catch {
+            // Node is stopped, break out
+            break;
+          }
+        }
+
+        // Extra safety buffer
+        await new Promise((r) => setTimeout(r, 1000));
+      } catch {
+        // Node might already be stopped, continue
+      }
+
+      // Step 2: Extract snapshot
+      processingMessage = "Extracting snapshot... this may take a few minutes";
+      const result = await core.invoke("extract_snapshot", {
+        archivePath: snapshotFilePath,
+      });
+
+      showToast(result, "success");
+      loadDataInfo(); // Refresh data folder info
+
+      // Step 3: Restart node
+      processingMessage = "Restarting node...";
+      try {
+        await core.invoke("start_node");
+      } catch {
+        showToast(
+          "Snapshot installed. Please restart the node manually.",
+          "info",
+        );
+      }
+    } catch (err) {
+      showToast(`Snapshot failed: ${err}`, "error");
+    }
+
+    snapshotInstalling = false;
+    isProcessing = false;
+  }
+
+  function cancelSnapshotInstall() {
+    snapshotModalOpen = false;
+    snapshotFilePath = "";
   }
 
   // ============ UPDATE TAB ============
@@ -1479,6 +1560,13 @@
                   <button class="cyber-btn" on:click={backupDataFolder}
                     >BACKUP ALL</button
                   >
+                  <button
+                    class="cyber-btn primary"
+                    on:click={installSnapshot}
+                    disabled={snapshotInstalling}
+                  >
+                    {snapshotInstalling ? "INSTALLING..." : "INSTALL SNAPSHOT"}
+                  </button>
                   <button class="cyber-btn ghost" on:click={loadDataInfo}
                     >REFRESH</button
                   >
@@ -2056,6 +2144,49 @@
       </div>
     {/if}
 
+    <!-- SNAPSHOT INSTALL CONFIRMATION MODAL -->
+    {#if snapshotModalOpen}
+      <div
+        class="modal-overlay"
+        transition:fade={{ duration: 150 }}
+        role="button"
+        tabindex="0"
+        on:click|self={cancelSnapshotInstall}
+        on:keydown={(e) => e.key === "Escape" && cancelSnapshotInstall()}
+      >
+        <div
+          class="modal-staged snapshot-modal"
+          transition:fly={{ y: 20, duration: 200 }}
+        >
+          <div class="modal-header warning">
+            <h3>⚠️ INSTALL SNAPSHOT</h3>
+          </div>
+          <div class="modal-body">
+            <p class="warning-text">
+              This will replace your <strong>blocks</strong> and
+              <strong>chainstate</strong> folders.
+            </p>
+            <p class="highlight-safe">Your wallet.dat will NOT be affected.</p>
+            <p class="desc">Make sure you have a backup before proceeding!</p>
+            <div class="snapshot-file-info">
+              <span class="file-label">FILE:</span>
+              <span class="file-path mono"
+                >{snapshotFilePath.split(/[/\\]/).pop()}</span
+              >
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="cyber-btn primary" on:click={confirmSnapshotInstall}>
+              INSTALL
+            </button>
+            <button class="cyber-btn ghost" on:click={cancelSnapshotInstall}>
+              CANCEL
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
     {#if toastMsg}
       <div
         class="toast-popup"
@@ -2267,15 +2398,19 @@ rpcallowip=127.0.0.1
 <!-- PROCESSING OVERLAY -->
 {#if isProcessing}
   <div class="modal-overlay" style="z-index: 999999;">
-    <div class="modal-frame" style="text-align:center; max-width: 350px;">
-      <div
-        class="spinner"
-        style="margin: 0 auto 1.5rem auto; width: 40px; height: 40px; border: 3px solid rgba(0,255,65,0.1); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite;"
-      ></div>
-      <h3 class="neon-text" style="color:var(--color-primary); margin:0;">
+    <div class="modal-frame" style="text-align:center; max-width: 400px;">
+      <h3
+        class="neon-text"
+        style="color:var(--color-primary); margin:0 0 1rem 0;"
+      >
         PLEASE WAIT
       </h3>
-      <p style="color:#888; margin-top:0.5rem;">{processingMessage}</p>
+      <p style="color:#aaa; margin:0;">{processingMessage}</p>
+      <p
+        style="color:#666; font-size:0.75rem; margin-top:1.5rem; line-height:1.4;"
+      >
+        App will respond once the command is done.
+      </p>
     </div>
   </div>
 {/if}
@@ -3028,6 +3163,51 @@ rpcallowip=127.0.0.1
     padding: 0 1.5rem; /* Remove top/bottom padding reliance */
     width: 100%; /* If flex:1 is set, this helps fill */
     margin: 0;
+  }
+
+  /* Snapshot Modal Specific Styles */
+  .snapshot-modal {
+    max-width: 450px;
+  }
+  .modal-header.warning {
+    background: rgba(255, 165, 0, 0.15);
+    border-bottom-color: rgba(255, 165, 0, 0.3);
+  }
+  .modal-header.warning h3 {
+    color: #ffa500;
+  }
+  .warning-text {
+    color: #ffa500;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+  .warning-text strong {
+    color: #fff;
+  }
+  .highlight-safe {
+    color: var(--color-primary);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  .snapshot-file-info {
+    margin-top: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 255, 65, 0.2);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .file-label {
+    color: #666;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+  }
+  .file-path {
+    color: var(--color-primary);
+    font-size: 0.85rem;
+    word-break: break-all;
   }
 
   /* === NEW CSS FOR v1.3 === */

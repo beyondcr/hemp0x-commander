@@ -2,89 +2,47 @@
 
 All notable changes to Hemp0x Commander are documented here.
 
-## [1.3.0] (WIP) - 2026-01-07
+## [1.3.0] (WIP) - 2026-01-08
+
+### New Features
+- **Snapshot Installer** - Install blockchain snapshots from `.7z` archives directly in the app
+  - Stops node, extracts, and restarts automatically
+  - Smart detection of nested folder structures
+- **Asset UX/UI Enhancements**
+  - Grouped assets with sub-asset hierarchy in list view
+  - Enhanced detail modal with metadata (supply, reissuable, IPFS, block height)
+  - Navigation arrows to flip through assets
+  - Sub-asset creation support in ISSUE tab
+  - IPFS hash field for asset metadata
 
 ### Wallet & Encryption
-- **Streamlined Workflow:**
-  - New Wallet creation now pauses appropriately to stop/start the node, preventing UI freezes.
-  - "Restore Wallet" now opens file picker directly (removed manual path entry).
-- **Encryption UI:**
-  - Added specific warning about password loss ("LOSE ACCESS").
-  - Added "Encryption Complete" modal with manual start verification.
-  - Fixed argument mismatch causing encryption failures.
-- **UX/UI Polish:**
-  - Center-aligned all modals and popups.
-  - Added "Processing..." blocking overlay with spinner for long-running tasks.
-  - Fixed "Passwords do not match" toast z-index (now visible).
-- **Address Sorting:**
-  - Added sorting (Label/Balance) to Receive page addresses.
-  - Interactive headers toggle ascending/descending order.
-- **Wallet Tab Polish:**
-  - Renamed and centered headers for clearer "Restore/Create" and "Export/Import" sections.
+- Streamlined new wallet creation with proper node stop/start
+- Restore Wallet opens file picker directly
+- Encryption warnings and completion modal
+- Address sorting by Label/Balance on Receive page
 
-### Performance & Cleanup
-- Removed unused `browseRestore()` function (dead code from old workflow).
-- Added `toastTimer` cleanup on component destroy (prevents memory leaks).
-- Password fields cleared after successful encryption (security hygiene).
-- Consolidated duplicate comments and removed AI-generated markers.
+### Tools
+- **Network Tab** - Peer management and diagnostics
+- **Peer Protection** - Auto-bans outdated nodes (<4.7.0)
+- **Ping & Port Tools** - Built-in network diagnostics
+- **Key Management** - Export/import private keys with balance display
+- **Open Folder** - Now opens file explorer directly (fixed)
 
-### New Stuff
-- **Network Tab** - New sub-tab under Tools for network diagnostics and peer management
-- **Peer Protection** - Auto-bans nodes running outdated versions (<4.7.0) every 2 minutes
-  - "Check Now" button for manual scans
-  - View/unban from the ban list
-- **Ping & Port Tools** - Built-in ping and TCP port checker (supports hostnames)
-- **Key Management** - Export/import private keys with proper wallet unlock flow
-  - Shows balance per address so you know which keys matter
-  - Select all/none for batch operations
-- **Mainnet/Regtest Toggle** - Switch networks from the UI, setting persists
+### UI Polish
+- Dark neon theme refinements
+- Center-aligned modals with proper z-index
+- Processing overlay with spinner
+- Responsive breakpoints for various screen sizes
 
 ### Backend
-- New commands: `ban_old_peers`, `get_ban_list`, `unban_peer`
-- New commands: `dump_priv_key`, `import_priv_key`
-- New commands: `execute_ping`, `check_open_port`, `get_net_info`
+- New commands for network, keys, and snapshot handling
 - Updated seed node to 147.93.185.184
-- Cleaned up duplicate handler registrations
-
-### UI Overhaul
-- **Look & Feel**
-  - Polished the dark neon theme throughout
-  - Green (#00ff41) accents with glow effects everywhere
-  - Better button hover/active states
-- **Wallet Tab**
-  - Merged Security + Key Management into one panel (was 3, now 2)
-  - Less wasted space, cleaner layout
-- **Export Keys Modal**
-  - Bigger checkboxes (18px), hover glow on rows
-  - Balance shown on right side of each address
-  - Address truncation for long strings
-- **Responsive Design**
-  - Width breakpoints at 800px and 600px
-  - Height breakpoint at 700px for compact mode
-  - Dashboard grid scales down properly
-  - Send form stacks vertically on narrow windows
-  - Header shrinks on small screens
-- **Network Tab UI**
-  - Peer protection panel with cyber styling
-  - Ping/Port modals with proper success/error states
-  - Ban list with unban buttons
-- **Modal Polish**
-  - Fixed double scrollbar issue
-  - Escape key closes modals
-  - Dark-themed scrollbars
-
-### Fixes
-- Fixed double scrollbar in Export Keys modal
-- Fixed memory leak from auto-ban interval (now cleared on unmount)
-- Fixed event listener leak for network-changed
-- Fixed unbanPeer sending wrong parameter name
-- Port checker now resolves hostnames (was IP-only before)
+- `sevenz-rust` integration for 7z extraction
 
 ### Cleanup
-- Removed ~20 lines of dead CSS (`.dot` class)
-- Removed console.log spam and commented debug code
-- Removed unused variables
-- Added proper lifecycle cleanup
+- Memory leak fixes
+- Dead code removal
+- Proper lifecycle cleanup
 
 ---
 

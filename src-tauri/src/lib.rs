@@ -941,7 +941,7 @@ fn transfer_asset(asset: String, amount: String, to: String) -> Result<String, S
 }
 
 #[tauri::command]
-fn issue_asset(name: String, qty: String, units: u8, reissuable: bool) -> Result<String, String> {
+fn issue_asset(name: String, qty: String, units: u8, reissuable: bool, ipfs: String) -> Result<String, String> {
   ensure_config()?;
   let qty_val: f64 = qty
     .trim()
@@ -951,15 +951,59 @@ fn issue_asset(name: String, qty: String, units: u8, reissuable: bool) -> Result
     return Err("Units must be between 0 and 8".to_string());
   }
   let flag = if reissuable { "true" } else { "false" };
-  run_cli(&[
-    String::from("issue"),
-    name,
-    format!("{qty_val}"),
-    String::new(),
-    String::new(),
-    units.to_string(),
-    flag.to_string(),
-  ])
+  
+  // If IPFS hash provided, include it in the command
+  if !ipfs.is_empty() {
+    run_cli(&[
+      String::from("issue"),
+      name,
+      format!("{qty_val}"),
+      String::new(), // address (empty = default)
+      String::new(), // change address (empty = default)
+      units.to_string(),
+      flag.to_string(),
+      String::from("true"), // has_ipfs
+      ipfs, // ipfs_hash
+    ])
+  } else {
+    run_cli(&[
+      String::from("issue"),
+      name,
+      format!("{qty_val}"),
+      String::new(),
+      String::new(),
+      units.to_string(),
+      flag.to_string(),
+    ])
+  }
+}
+
+#[derive(Serialize)]
+struct AssetData {
+  name: String,
+  amount: f64,
+  units: u8,
+  reissuable: bool,
+  has_ipfs: bool,
+  ipfs_hash: String,
+  block_height: u64,
+}
+
+#[tauri::command]
+fn get_asset_data(name: String) -> Result<AssetData, String> {
+  ensure_config()?;
+  let raw = run_cli(&[String::from("getassetdata"), name.clone()])?;
+  let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+  
+  Ok(AssetData {
+    name: value.get("name").and_then(|v| v.as_str()).unwrap_or(&name).to_string(),
+    amount: value.get("amount").and_then(|v| v.as_f64()).unwrap_or(0.0),
+    units: value.get("units").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
+    reissuable: value.get("reissuable").and_then(|v| v.as_i64()).map(|v| v == 1).unwrap_or(false),
+    has_ipfs: value.get("has_ipfs").and_then(|v| v.as_i64()).map(|v| v == 1).unwrap_or(false),
+    ipfs_hash: value.get("ipfs_hash").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+    block_height: value.get("block_height").and_then(|v| v.as_u64()).unwrap_or(0),
+  })
 }
 
 // Minimum required version
@@ -1233,6 +1277,110 @@ fn read_config() -> Result<String, String> {
 fn write_config(contents: String) -> Result<(), String> {
   let cfg = ensure_config()?;
   fs::write(cfg, contents).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn extract_snapshot(archive_path: String) -> Result<String, String> {
+  use std::path::{Path, PathBuf};
+  
+  let archive = Path::new(&archive_path);
+  if !archive.exists() {
+    return Err("Snapshot file not found".to_string());
+  }
+  
+  let dest_dir = data_dir()?;
+  
+  // Create a temp extraction folder
+  let temp_extract = dest_dir.join("_snapshot_temp");
+  if temp_extract.exists() {
+    fs::remove_dir_all(&temp_extract).map_err(|e| format!("Failed to clean temp: {}", e))?;
+  }
+  fs::create_dir_all(&temp_extract).map_err(|e| format!("Failed to create temp dir: {}", e))?;
+  
+  // Extract to temp folder
+  sevenz_rust::decompress_file(&archive, &temp_extract)
+    .map_err(|e| format!("7z extraction failed: {}", e))?;
+  
+  // Find blocks and chainstate folders - check root level first, then one level deep
+  fn find_chain_folders(base: &Path) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
+    let mut blocks_path: Option<PathBuf> = None;
+    let mut chainstate_path: Option<PathBuf> = None;
+    
+    // Check root level
+    let root_blocks = base.join("blocks");
+    let root_chainstate = base.join("chainstate");
+    
+    if root_blocks.exists() && root_blocks.is_dir() {
+      blocks_path = Some(root_blocks);
+    }
+    if root_chainstate.exists() && root_chainstate.is_dir() {
+      chainstate_path = Some(root_chainstate);
+    }
+    
+    // If found at root, return
+    if blocks_path.is_some() || chainstate_path.is_some() {
+      return Some((blocks_path, chainstate_path));
+    }
+    
+    // Check one level deep (e.g., snapshot_folder/blocks)
+    if let Ok(entries) = fs::read_dir(base) {
+      for entry in entries.flatten() {
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+          let sub_dir = entry.path();
+          let nested_blocks = sub_dir.join("blocks");
+          let nested_chainstate = sub_dir.join("chainstate");
+          
+          if nested_blocks.exists() && nested_blocks.is_dir() {
+            blocks_path = Some(nested_blocks);
+          }
+          if nested_chainstate.exists() && nested_chainstate.is_dir() {
+            chainstate_path = Some(nested_chainstate);
+          }
+          
+          if blocks_path.is_some() || chainstate_path.is_some() {
+            return Some((blocks_path, chainstate_path));
+          }
+        }
+      }
+    }
+    
+    None
+  }
+  
+  let (blocks_path, chainstate_path) = find_chain_folders(&temp_extract)
+    .ok_or_else(|| "Invalid snapshot: could not find 'blocks' or 'chainstate' folder".to_string())?;
+  
+  let has_blocks = blocks_path.is_some();
+  let has_chainstate = chainstate_path.is_some();
+  
+  // Remove existing folders and move new ones
+  if let Some(blocks_src) = blocks_path {
+    let old_blocks = dest_dir.join("blocks");
+    if old_blocks.exists() {
+      fs::remove_dir_all(&old_blocks).map_err(|e| format!("Failed to remove old blocks: {}", e))?;
+    }
+    fs::rename(&blocks_src, &old_blocks)
+      .map_err(|e| format!("Failed to install blocks: {}", e))?;
+  }
+  
+  if let Some(chainstate_src) = chainstate_path {
+    let old_chainstate = dest_dir.join("chainstate");
+    if old_chainstate.exists() {
+      fs::remove_dir_all(&old_chainstate).map_err(|e| format!("Failed to remove old chainstate: {}", e))?;
+    }
+    fs::rename(&chainstate_src, &old_chainstate)
+      .map_err(|e| format!("Failed to install chainstate: {}", e))?;
+  }
+  
+  // Clean up temp
+  let _ = fs::remove_dir_all(&temp_extract);
+  
+  let msg = format!(
+    "Snapshot installed! blocks: {}, chainstate: {}",
+    if has_blocks { "✓" } else { "-" },
+    if has_chainstate { "✓" } else { "-" }
+  );
+  Ok(msg)
 }
 
 #[tauri::command]
@@ -1682,7 +1830,9 @@ pub fn run() {
       get_binary_status,
       extract_binaries,
       load_address_book,
-      save_address_book
+      save_address_book,
+      get_asset_data,
+      extract_snapshot
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
