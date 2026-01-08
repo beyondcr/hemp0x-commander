@@ -44,6 +44,10 @@ All notable changes to Hemp0x Commander are documented here.
 - Dead code removal
 - Proper lifecycle cleanup
 
+### Build & Infrastructure
+- **Portable Linux Binaries** - Fully static builds (Boost/BDB embedded) for cross-distro compatibility (Nobara/Ubuntu 18.04+)
+- Updated bundled binaries to latest static version
+
 ---
 
 ## [1.2.0] - 2026-01-05
