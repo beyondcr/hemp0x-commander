@@ -12,8 +12,8 @@ export const SUB_ASSET_CREATION_FEE = "0.25";
 export const NFT_CREATION_FEE = "0.25";
 
 // Network defaults
-export const DEFAULT_RPC_PORT = 9766;
-export const DEFAULT_P2P_PORT = 9767;
+export const DEFAULT_RPC_PORT = 42068;
+export const DEFAULT_P2P_PORT = 42069;
 
 // Explorer URL
 export const EXPLORER_URL = "https://explorer.hemp0x.com";

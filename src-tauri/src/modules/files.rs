@@ -155,6 +155,8 @@ daemon=0
 listen=1
 txindex=1
 assetindex=1
+port=42069
+rpcport=42068
 "#, rpc_user, rpc_pass);
   
   fs::write(&cfg, default_config).map_err(|e| e.to_string())?;
