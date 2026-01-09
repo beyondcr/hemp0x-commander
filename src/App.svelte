@@ -3,6 +3,13 @@
   import { core } from "@tauri-apps/api";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
+  import {
+    nodeStatus,
+    walletInfo as walletStore,
+    networkInfo,
+    systemStatus as systemStore,
+  } from "./stores.js"; // IMPORT STORES
+
   // Window resize lock removed to keep tab interactions responsive.
   import logoNew from "./assets/logonew.png";
   import eyeOpen from "./assets/eye-open.png";
@@ -11,6 +18,7 @@
   import ViewReceive from "./lib/ViewReceive.svelte";
   import ViewAssets from "./lib/ViewAssets.svelte";
   import ViewTools from "./lib/ViewTools.svelte";
+  import { APP_VERSION } from "./lib/constants.js";
 
   // --- STATE ---
   let activeTab = "DASHBOARD"; // DASHBOARD, SEND, RECEIVE, ASSETS, TOOLS, ABOUT
@@ -140,6 +148,25 @@
     };
     recentTx = [];
     lastError = reason;
+
+    // UPDATE STORES (OFFLINE)
+    nodeStatus.set({
+      online: false,
+      version: "--",
+      connections: 0,
+      headers: 0,
+      blocks: 0,
+      verificationProgress: 0,
+      error: reason,
+    });
+    walletStore.set({
+      balance: 0.0,
+      unconfirmed: 0.0,
+      immature: 0.0,
+      transactions: [],
+      newTxCount: 0,
+      status: "--",
+    });
   }
 
   async function refreshDashboard() {
@@ -156,6 +183,31 @@
       walletInfo = data.wallet;
       recentTx = data.tx;
       lastError = "";
+
+      // UPDATE STORES (ONLINE)
+      nodeStatus.set({
+        online: data.node.state === "RUNNING",
+        version: "--", // Not provided by dashboard_data yet
+        connections: parseInt(data.node.peers) || 0,
+        headers: parseInt(data.node.headers) || 0,
+        blocks: parseInt(data.node.blocks) || 0,
+        verificationProgress: 0, // Not provided
+        error: null,
+      });
+
+      walletStore.set({
+        balance: parseFloat(data.wallet.balance) || 0.0,
+        unconfirmed: parseFloat(data.wallet.pending) || 0.0,
+        immature: parseFloat(data.wallet.staked) || 0.0,
+        transactions: data.tx || [],
+        newTxCount: 0,
+        status: data.wallet.status || "--",
+      });
+
+      networkInfo.update((n) => ({
+        ...n,
+        difficulty: parseFloat(data.node.diff) || 0,
+      }));
     } catch (err) {
       setOffline(String(err || "RPC error"));
     } finally {
@@ -261,6 +313,7 @@
 
   onMount(() => {
     tauriReady = true; // Force accurate ready state for UI logic
+    systemStore.update((s) => ({ ...s, tauriReady: true }));
 
     // Show window unconditionally (Anti-Flash)
     setTimeout(async () => {
@@ -297,6 +350,7 @@
         .invoke("get_network_mode")
         .then((res) => {
           networkMode = res;
+          networkInfo.update((n) => ({ ...n, chain: res }));
         })
         .catch((err) => {
           console.error("Failed to load network mode", err);
@@ -306,6 +360,7 @@
       listen("network-changed", (event) => {
         if (event.payload && event.payload.mode) {
           networkMode = event.payload.mode;
+          networkInfo.update((n) => ({ ...n, chain: event.payload.mode }));
         }
       }).then((fn) => {
         unlistenNetwork = fn;
@@ -341,7 +396,7 @@
       <img src={logoNew} alt="Hemp0x" class="logo" />
       <div class="brand-info">
         <h1 class="app-title">
-          HEMP0X COMMANDER <span class="version">v1.3</span>
+          HEMP0X COMMANDER <span class="version">{APP_VERSION}</span>
         </h1>
         <div class="app-status">SECURE SESSION - {sessionStamp}</div>
       </div>
@@ -551,22 +606,21 @@
     </div>
 
     <div class="view-wrapper" class:show={activeTab === "SEND"}>
-      <ViewSend {walletInfo} {nodeInfo} {tauriReady} />
+      <ViewSend />
     </div>
 
     <div class="view-wrapper" class:show={activeTab === "RECEIVE"}>
-      <ViewReceive isNodeOnline={nodeInfo.state === "RUNNING"} />
+      <ViewReceive />
     </div>
 
     <div class="view-wrapper" class:show={activeTab === "ASSETS"}>
-      <ViewAssets isNodeOnline={nodeInfo.state === "RUNNING"} />
+      <ViewAssets />
     </div>
 
     <div class="view-wrapper" class:show={activeTab === "TOOLS"}>
       <ViewTools
         bind:consoleOutput={globalConsoleOutput}
         bind:consoleHistory={globalConsoleHistory}
-        isNodeOnline={nodeInfo.state === "RUNNING"}
       />
     </div>
 
@@ -576,7 +630,7 @@
           <img src={logoNew} alt="Hemp0x Logo" class="about-logo" />
           <div class="about-title-block">
             <h1 class="about-title">HEMP0X COMMANDER</h1>
-            <span class="about-version">v1.3</span>
+            <span class="about-version">{APP_VERSION}</span>
           </div>
           <label class="welcome-toggle">
             <input
@@ -720,7 +774,7 @@
       <div class="welcome-modal">
         <div class="welcome-header">
           <h2>Welcome To Hemp0x Commander</h2>
-          <span class="welcome-version">v1.3</span>
+          <span class="welcome-version">{APP_VERSION}</span>
         </div>
         <div class="welcome-body">
           <p class="welcome-text">

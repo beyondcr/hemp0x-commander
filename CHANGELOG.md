@@ -5,6 +5,7 @@ All notable changes to Hemp0x Commander are documented here.
 ## [1.3.0] (WIP) - 2026-01-08
 
 ### New Features
+- **Major Code Base Refactor** - Complete modularization of backend and frontend for stability and maintainability
 - **Snapshot Installer** - Install blockchain snapshots from `.7z` archives directly in the app
   - Stops node, extracts, and restarts automatically
   - Smart detection of nested folder structures

@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { core } from "@tauri-apps/api";
     import { save, open } from "@tauri-apps/plugin-dialog";
+    import { formatAmount } from "./utils.js";
 
     // --- FORM STATE ---
     let address = "";
@@ -10,12 +11,22 @@
     let assets = ["HEMP"];
     let status = "";
 
-    // --- APP STATE (Passed from Parent) ---
-    export let tauriReady = false;
-    export let walletInfo = { status: "--", balance: "--" };
-    export let nodeInfo = { state: "--", synced: false };
+    // --- APP STATE (Refactored to Stores) ---
+    import {
+        nodeStatus,
+        walletInfo as walletStore,
+        systemStatus,
+    } from "../stores.js";
 
-    // Reactive checks derived from props
+    // Reactive proxies to maintain API compatibility
+    $: tauriReady = $systemStatus.tauriReady;
+    $: walletInfo = $walletStore;
+    $: nodeInfo = {
+        state: $nodeStatus.online ? "RUNNING" : "OFFLINE",
+        synced: true, // Simplified for now
+    };
+
+    // Reactive checks derived from props/stores
     $: walletStatus = walletInfo.status;
     $: walletBalance = walletInfo.balance;
     // Require valid wallet status AND running node
@@ -321,7 +332,7 @@
 
         // 2. Validate Address via RPC
         try {
-            const res = await core.invoke("run_cli", {
+            const res = await core.invoke("run_cli_args", {
                 args: ["validateaddress", addr],
             });
             const json = JSON.parse(res);
@@ -429,13 +440,6 @@
             }
         }
         totalSelected = sum;
-    }
-
-    function formatAmount(val) {
-        return val.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 8,
-        });
     }
 
     async function executeAdvancedSend() {
@@ -1176,25 +1180,7 @@
     }
 
     /* --- CONFIRMATION MODAL --- */
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(
-            0,
-            0,
-            0,
-            0.98
-        ); /* Increased opacity to block footer bleed-through */
-        backdrop-filter: blur(8px);
-        z-index: 3000; /* Ensure on top of everything */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    }
+    /* .modal-overlay moved to components.css */
     .utxo-modal {
         background: #0a0a0a;
         border: 1px solid var(--color-primary);

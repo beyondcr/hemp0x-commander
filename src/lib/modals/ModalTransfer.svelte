@@ -1,0 +1,270 @@
+<script>
+    import { fly, fade } from "svelte/transition";
+    import { createEventDispatcher } from "svelte";
+    const dispatch = createEventDispatcher();
+
+    export let isOpen = false;
+    export let nodeOnline = false;
+    export let assets = [];
+
+    // Bindable fields
+    export let selectedAsset = "";
+    export let toAddress = "";
+    export let amount = "";
+
+    function close() {
+        dispatch("close");
+    }
+
+    function transfer() {
+        dispatch("transfer");
+    }
+</script>
+
+{#if isOpen}
+    <div
+        class="modal-overlay"
+        transition:fade={{ duration: 150 }}
+        on:click={close}
+        on:keydown={(e) => e.key === "Escape" && close()}
+        role="button"
+        tabindex="0"
+    >
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+            class="form-panel glass-modal"
+            on:click|stopPropagation
+            transition:fly={{ y: 20 }}
+        >
+            <div class="form-header compact">
+                <button class="back-btn" on:click={close} title="Close">
+                    ← BACK
+                </button>
+                <span class="form-title">TRANSFER {selectedAsset}</span>
+            </div>
+            <div class="form-grid compact-grid">
+                <div class="form-group full-width">
+                    <label for="tx-asset">SELECT ASSET</label>
+                    <select
+                        id="tx-asset"
+                        bind:value={selectedAsset}
+                        class="glass-input"
+                    >
+                        {#each assets as item}
+                            <option value={item.name}
+                                >{item.name} • {item.balance}</option
+                            >
+                        {/each}
+                    </select>
+                </div>
+                <div class="form-group wide">
+                    <label for="tx-to">RECIPIENT ADDRESS</label>
+                    <input
+                        id="tx-to"
+                        type="text"
+                        class="glass-input mono"
+                        placeholder="Enter address..."
+                        bind:value={toAddress}
+                    />
+                </div>
+                <div class="form-group narrow">
+                    <label for="tx-amt">AMOUNT</label>
+                    <input
+                        id="tx-amt"
+                        type="number"
+                        class="glass-input mono"
+                        placeholder="0"
+                        bind:value={amount}
+                    />
+                </div>
+
+                <!-- Footer for Transfer -->
+                <div
+                    class="form-group full-width action-row"
+                    style="justify-content: flex-end;"
+                >
+                    <button
+                        class="neon-btn"
+                        on:click={transfer}
+                        disabled={!nodeOnline}
+                    >
+                        <span class="btn-glow"></span>
+                        SEND TRANSFER
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<style>
+    /* Local Style Copy */
+    .glass-modal {
+        background: rgba(10, 15, 12, 0.95);
+        border: 1px solid rgba(0, 255, 65, 0.25);
+        border-radius: 16px;
+        box-shadow:
+            0 0 80px rgba(0, 0, 0, 0.8),
+            0 0 40px rgba(0, 255, 65, 0.1);
+        overflow: hidden;
+    }
+    .form-panel {
+        max-width: 700px;
+        margin: 0 auto;
+        padding: 2rem;
+        width: 100%;
+    }
+    .form-header.compact {
+        padding: 0.8rem 1.5rem;
+    }
+    .form-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        margin-bottom: 0.75rem;
+    }
+    .back-btn {
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #888;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.7rem;
+        font-weight: 500;
+        letter-spacing: 1px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .back-btn:hover {
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+        background: rgba(0, 255, 65, 0.05);
+    }
+    .form-title {
+        color: var(--color-primary);
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+    }
+    .form-grid.compact-grid {
+        gap: 0.8rem 1.2rem;
+        padding: 0 1.5rem 1.5rem;
+    }
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 1rem 1.5rem;
+    }
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+    .form-group.full-width {
+        grid-column: span 12;
+    }
+    .form-group.wide {
+        grid-column: span 8;
+    }
+    .form-group.narrow {
+        grid-column: span 4;
+    }
+    label {
+        font-size: 0.6rem;
+        color: #666;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+    }
+    .glass-input {
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #fff;
+        padding: 0.7rem 1rem;
+        font-size: 0.85rem;
+        border-radius: 10px;
+        outline: none;
+        width: 100%;
+        transition: all 0.2s;
+        backdrop-filter: blur(5px);
+    }
+    .glass-input:focus {
+        border-color: var(--color-primary);
+        box-shadow:
+            0 0 20px rgba(0, 255, 65, 0.15),
+            inset 0 0 20px rgba(0, 255, 65, 0.03);
+    }
+    select.glass-input {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300ff41'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 14px;
+        padding-right: 32px;
+    }
+    select.glass-input option {
+        background: #0a0a0a;
+        color: #ccc;
+    }
+    .action-row {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+        gap: 1rem;
+    }
+    .neon-btn {
+        position: relative;
+        background: linear-gradient(
+            180deg,
+            rgba(0, 255, 65, 0.15) 0%,
+            rgba(0, 255, 65, 0.05) 100%
+        );
+        border: 1px solid var(--color-primary);
+        color: var(--color-primary);
+        padding: 0.8rem 2rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 2px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        overflow: hidden;
+    }
+    .neon-btn:hover:not(:disabled) {
+        background: var(--color-primary);
+        color: #000;
+        box-shadow:
+            0 0 30px var(--color-primary),
+            0 0 60px rgba(0, 255, 65, 0.3);
+        transform: translateY(-1px);
+    }
+    .neon-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .btn-glow {
+        position: absolute;
+        inset: -50%;
+        background: conic-gradient(
+            transparent,
+            transparent,
+            transparent,
+            rgba(0, 255, 65, 0.2)
+        );
+        animation: spin 4s linear infinite;
+        opacity: 0;
+    }
+    .neon-btn:hover .btn-glow {
+        opacity: 1;
+    }
+    @keyframes spin {
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+</style>

@@ -1,0 +1,176 @@
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+
+pub fn bin_name(name: &str) -> String {
+  if cfg!(windows) {
+    format!("{name}.exe")
+  } else {
+    name.to_string()
+  }
+}
+
+pub fn add_bin_candidates(candidates: &mut Vec<PathBuf>, base: PathBuf, name: &str, depth: usize) {
+  let mut current = Some(base);
+  for _ in 0..=depth {
+    if let Some(path) = current {
+      candidates.push(path.join(bin_name(name)));
+      current = path.parent().map(|p| p.to_path_buf());
+    } else {
+      break;
+    }
+  }
+}
+
+pub fn resolve_bin(name: &str) -> String {
+  if let Ok(exe) = std::env::current_exe() {
+    if let Some(dir) = exe.parent() {
+      let candidate = dir.join(bin_name(name));
+      if candidate.exists() {
+         return candidate.to_string_lossy().to_string();
+      }
+      
+      let resources = dir.join("resources").join(bin_name(name));
+      if resources.exists() {
+        return resources.to_string_lossy().to_string();
+      }
+    }
+  }
+
+  let mut candidates: Vec<PathBuf> = Vec::new();
+  if let Ok(cwd) = std::env::current_dir() {
+    add_bin_candidates(&mut candidates, cwd, name, 4);
+  }
+  
+  // NOTE: CARGO_MANIFEST_DIR is compile time check, might need passing in or logic change if not available in library?
+  // Actually env! works in lib crate too.
+  let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| String::from("."));
+  add_bin_candidates(&mut candidates, PathBuf::from(manifest), name, 5);
+  
+  if !cfg!(windows) {
+    if let Some(home) = dirs::home_dir() {
+      let candidate = home
+        .join("hemp0x-deploy")
+        .join("hemp0x-core")
+        .join("src")
+        .join(bin_name(name));
+      candidates.push(candidate);
+    }
+  }
+  
+  for candidate in candidates {
+    if candidate.exists() {
+      return candidate.to_string_lossy().to_string();
+    }
+  }
+  
+  name.to_string()
+}
+
+pub fn split_args(input: &str) -> Vec<String> {
+  let mut args = Vec::new();
+  let mut current = String::new();
+  let mut in_quotes = false;
+  let mut quote_char = '\0';
+  let mut chars = input.chars().peekable();
+  while let Some(ch) = chars.next() {
+    if in_quotes {
+      if ch == quote_char {
+        in_quotes = false;
+      } else if ch == '\\' {
+        if let Some(next) = chars.next() {
+          current.push(next);
+        }
+      } else {
+        current.push(ch);
+      }
+    } else if ch == '"' || ch == '\'' {
+      in_quotes = true;
+      quote_char = ch;
+    } else if ch.is_whitespace() {
+      if !current.is_empty() {
+        args.push(current.clone());
+        current.clear();
+      }
+    } else {
+      current.push(ch);
+    }
+  }
+  if !current.is_empty() {
+    args.push(current);
+  }
+  args
+}
+
+pub fn parse_balances(value: &serde_json::Value, map: &mut HashMap<String, f64>) {
+  if let Some(arr) = value.as_array() {
+    for item in arr {
+      if let Some(row) = item.as_array() {
+        if row.len() >= 2 {
+          if let (Some(addr), Some(amount)) = (row[0].as_str(), row[1].as_f64()) {
+            map.insert(addr.to_string(), amount);
+          }
+        }
+        parse_balances(item, map);
+      }
+    }
+  }
+}
+
+pub fn calculate_dir_size(path: &Path) -> u64 {
+  let mut total = 0u64;
+  if let Ok(entries) = std::fs::read_dir(path) {
+    for entry in entries.flatten() {
+      let p = entry.path();
+      if p.is_file() {
+        total += std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+      } else if p.is_dir() {
+        total += calculate_dir_size(&p);
+      }
+    }
+  }
+  total
+}
+
+pub fn format_size(bytes: u64) -> String {
+  const KB: u64 = 1024;
+  const MB: u64 = KB * 1024;
+  const GB: u64 = MB * 1024;
+  
+  if bytes >= GB {
+    format!("{:.2} GB", bytes as f64 / GB as f64)
+  } else if bytes >= MB {
+    format!("{:.2} MB", bytes as f64 / MB as f64)
+  } else if bytes >= KB {
+    format!("{:.2} KB", bytes as f64 / KB as f64)
+  } else {
+    format!("{} bytes", bytes)
+  }
+}
+
+const MIN_VERSION: (u32, u32, u32) = (4, 7, 0);
+
+pub fn parse_version(subver: &str) -> Option<(u32, u32, u32)> {
+  let stripped = subver.trim_matches('/');
+  if let Some(ver_str) = stripped.strip_prefix("Hemp0x:") {
+    let parts: Vec<&str> = ver_str.split('.').collect();
+    if parts.len() >= 3 {
+      let major = parts[0].parse().ok()?;
+      let minor = parts[1].parse().ok()?;
+      let patch = parts[2].parse().ok()?;
+      return Some((major, minor, patch));
+    }
+  }
+  None
+}
+
+pub fn version_is_old(subver: &str) -> bool {
+  if let Some((major, minor, patch)) = parse_version(subver) {
+    if major < MIN_VERSION.0 { return true; }
+    if major > MIN_VERSION.0 { return false; }
+    if minor < MIN_VERSION.1 { return true; }
+    if minor > MIN_VERSION.1 { return false; }
+    if patch < MIN_VERSION.2 { return true; }
+    return false;
+  }
+  true
+}

@@ -14,7 +14,9 @@ Cargo.lock
 **/*.rs.bk
 src-tauri/*.exe
 src-tauri/hemp0xd
+src-tauri/hemp0xd-*
 src-tauri/hemp0x-cli
+src-tauri/hemp0x-cli-*
 
 # OS Specific
 .DS_Store

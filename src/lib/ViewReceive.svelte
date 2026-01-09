@@ -2,6 +2,8 @@
     import { onMount } from "svelte";
     import { core } from "@tauri-apps/api";
     import { fly } from "svelte/transition";
+    import { formatBalance } from "./utils.js";
+    import { nodeStatus } from "../stores.js"; // Import Store
 
     let label = "";
     let addresses = [];
@@ -9,12 +11,13 @@
     let tauriReady = false;
     let showChange = false;
     let isExpanded = false; // EXPANSION STATE
-    export let isNodeOnline = false; // Received from App.svelte
+
+    $: isNodeOnline = $nodeStatus.online;
 
     async function refreshList() {
         if (!tauriReady) {
             status = "Tauri backend not available.";
-            isNodeOnline = false;
+            // isNodeOnline = false; // Removed: Store is source of truth
             return;
         }
         try {
@@ -22,7 +25,7 @@
                 showChange,
             });
             status = "";
-            isNodeOnline = true;
+            // isNodeOnline = true; // Removed
         } catch (err) {
             // Show friendly message for connection errors
             const errStr = String(err || "");
@@ -32,10 +35,10 @@
                 errStr.includes("RPC")
             ) {
                 status = "Node not connected - Start node to load addresses";
-                isNodeOnline = false;
+                // isNodeOnline = false; // Removed
             } else {
                 status = `Error: ${err}`;
-                isNodeOnline = true; // Other errors don't mean disconnected
+                // isNodeOnline = true; // Removed
             }
         }
     }
@@ -238,7 +241,9 @@
                 >
                     <span class="dim label-text">{item.label || "-"}</span>
                     <span class="mono addr">{item.address}</span>
-                    <span class="mono val right">{item.balance}</span>
+                    <span class="mono val right"
+                        >{formatBalance(item.balance)}</span
+                    >
                 </div>
             {/each}
         </div>
@@ -420,16 +425,7 @@
         cursor: pointer;
         transition: all 0.2s;
     }
-    .btn-gen.cyber-btn {
-        background: rgba(0, 255, 65, 0.1);
-        border: 1px solid var(--color-primary);
-        color: var(--color-primary);
-    }
-    .btn-gen.cyber-btn:hover {
-        background: var(--color-primary);
-        color: #000;
-        box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
-    }
+
     .btn-gen.ghost {
         background: transparent;
         border: 1px solid rgba(255, 255, 255, 0.1);
