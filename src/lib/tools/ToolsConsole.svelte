@@ -77,9 +77,6 @@
     async function runCommand() {
         // if (!isNodeOnline && !shellMode) {
         //   showToast("Node is offline", "error");
-        //   return;
-        // }
-        // (Removing tauriReady check as prop since logic exists elsewhere, or assuming true if mounted)
 
         try {
             const line = cmdLine.trim();
