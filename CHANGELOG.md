@@ -16,6 +16,11 @@ All notable changes to Hemp0x Commander are documented here.
   - IPFS hash field for asset metadata
   - **Smart Balance Formatting** - Auto-shortens large numbers (1.2M, 500K) and strips trailing zeros
   - **Streamlined Forms** - Compact layouts for CREATE/TRANSFER with click-to-close backdrops
+  - **Asset Modals** - Unified Modal UX for Sub-Assets, NFTs, Transfer, and Reissue
+  - **Navigation** - Preserves Asset Card background when opening actions
+  - **Accessibility** - Fixed label associations and backdrop interactions
+  - **Compact NFT Modal** - Optimized layout merging fields
+  - **UI Polish** - Fixed layout gaps and button spacing in Asset Card
 
 ### Wallet & Encryption
 - Streamlined new wallet creation with proper node stop/start
