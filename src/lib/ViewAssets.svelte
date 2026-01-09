@@ -35,11 +35,43 @@
     let confirmPayload = null;
     let confirmType = "";
 
+    // Browse Modal
+    let browseModalOpen = false;
+    let browsePattern = "";
+    let browseResults = [];
+    let browseLoading = false;
+
     // Allow parent to pass initial state
     export let isNodeOnline = false;
 
     // Always allow operations - errors will be shown if node is offline
     let nodeOnline = true; // Default to true, let operations fail gracefully
+
+    // Format balance: strip trailing zeros and use K/M/B for large numbers
+    function formatBalance(balance) {
+        const num = parseFloat(balance);
+        if (isNaN(num)) return balance;
+
+        // Format the integer and decimal parts separately
+        const absNum = Math.abs(num);
+
+        // For display, use K/M/B format for large integers
+        let formatted;
+        if (absNum >= 1_000_000_000) {
+            formatted =
+                (num / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "") + "B";
+        } else if (absNum >= 1_000_000) {
+            formatted =
+                (num / 1_000_000).toFixed(2).replace(/\.?0+$/, "") + "M";
+        } else if (absNum >= 10_000) {
+            formatted = (num / 1_000).toFixed(1).replace(/\.?0+$/, "") + "K";
+        } else {
+            // Keep full precision but strip trailing zeros
+            formatted = num.toFixed(8).replace(/\.?0+$/, "");
+        }
+
+        return formatted;
+    }
 
     onMount(async () => {
         tauriReady =
@@ -61,8 +93,10 @@
             myAssets = await core.invoke("list_assets");
             nodeOnline = true;
             status = "";
-            if (!selectedAsset && myAssets.length > 0)
-                selectedAsset = myAssets[0].name;
+            // Set default asset to first transferable (non-ownership) token
+            const transferable = myAssets.filter((a) => !a.name.endsWith("!"));
+            if (!selectedAsset && transferable.length > 0)
+                selectedAsset = transferable[0].name;
             if (!reissueAsset && myAssets.length > 0)
                 reissueAsset = myAssets[0].name;
         } catch (err) {
@@ -133,6 +167,28 @@
     let metadataLoading = false;
     let slideDirection = 0; // -1 = left, 1 = right, 0 = none
 
+    // Custom Tooltip
+    let tooltip = {
+        visible: false,
+        text: "",
+        x: 0,
+        y: 0,
+    };
+
+    function showTooltip(e, text) {
+        const rect = e.target.getBoundingClientRect();
+        tooltip = {
+            visible: true,
+            text: text,
+            x: rect.left + rect.width / 2,
+            y: rect.top - 10,
+        };
+    }
+
+    function hideTooltip() {
+        tooltip.visible = false;
+    }
+
     async function openDetail(asset) {
         selectedDetail = asset;
         assetMetadata = null;
@@ -155,6 +211,7 @@
         selectedDetail = null;
         assetMetadata = null;
         slideDirection = 0;
+        hideTooltip();
     }
 
     function navigatePrev() {
@@ -248,7 +305,7 @@
             if (confirmType === "TRANSFER") {
                 txid = await core.invoke("transfer_asset", {
                     asset: confirmPayload.asset,
-                    amount: confirmPayload.amount,
+                    amount: String(confirmPayload.amount),
                     to: confirmPayload.to,
                 });
                 status = `Sent! TXID: ${txid.slice(0, 16)}...`;
@@ -267,6 +324,7 @@
                 issueQty = "1";
                 issueIpfs = "";
                 if (issueType === "sub") issueParent = "";
+                activeTab = "MY_ASSETS"; // Return to assets after create
             } else if (confirmType === "REISSUE") {
                 txid = await core
                     .invoke("reissue_asset", {
@@ -288,40 +346,38 @@
     }
 </script>
 
+{#if tooltip.visible}
+    <div
+        class="custom-tooltip"
+        style="top: {tooltip.y}px; left: {tooltip.x}px;"
+    >
+        {tooltip.text}
+    </div>
+{/if}
+
 <div class="view-assets">
     <div class="cyber-panel main-frame">
-        <!-- HEADER / TABS -->
+        <!-- HEADER -->
         <header class="panel-header">
-            <nav class="nav-tabs">
+            <div class="header-left">
+                <span class="header-title">◈ MY ASSETS</span>
+            </div>
+            <div class="header-actions">
                 <button
-                    class="nav-tab"
-                    class:active={activeTab === "MY_ASSETS"}
-                    on:click={() => (activeTab = "MY_ASSETS")}
+                    class="header-btn"
+                    on:click={() => (activeTab = "CREATE")}
+                    disabled={!nodeOnline}
                 >
-                    <span class="tab-icon">◈</span> MY ASSETS
+                    + CREATE
                 </button>
                 <button
-                    class="nav-tab"
-                    class:active={activeTab === "TRANSFER"}
-                    on:click={() => (activeTab = "TRANSFER")}
+                    class="header-btn"
+                    on:click={() => (browseModalOpen = true)}
+                    disabled={!nodeOnline}
                 >
-                    <span class="tab-icon">→</span> TRANSFER
+                    🔍 BROWSE
                 </button>
-                <button
-                    class="nav-tab"
-                    class:active={activeTab === "ISSUE"}
-                    on:click={() => (activeTab = "ISSUE")}
-                >
-                    <span class="tab-icon">+</span> ISSUE
-                </button>
-                <button
-                    class="nav-tab"
-                    class:active={activeTab === "REISSUE"}
-                    on:click={() => (activeTab = "REISSUE")}
-                >
-                    <span class="tab-icon">↻</span> REISSUE
-                </button>
-            </nav>
+            </div>
             <div class="header-status">
                 <span class="pulse-dot" class:online={nodeOnline}></span>
                 <span class="status-label"
@@ -375,13 +431,13 @@
                                             {asset.name}
                                         </div>
                                         <div class="asset-balance">
-                                            {asset.balance}
+                                            {formatBalance(asset.balance)}
                                         </div>
                                         <div class="asset-meta">
                                             <span class="asset-type"
                                                 >{asset.hasOwner
-                                                    ? "OWNER"
-                                                    : asset.type}</span
+                                                    ? "👑 OWNER"
+                                                    : "🔒 LOCKED"}</span
                                             >
                                             <button
                                                 class="quick-transfer"
@@ -409,58 +465,107 @@
 
                         <!-- ═══════════════ TRANSFER ═══════════════ -->
                     {:else if activeTab === "TRANSFER"}
-                        <div class="form-panel glass-form">
-                            <div class="form-grid">
-                                <div class="form-group full">
+                        <!-- Click outside to go back -->
+                        <div
+                            class="create-backdrop"
+                            on:click={() => (activeTab = "MY_ASSETS")}
+                            on:keydown={(e) =>
+                                e.key === "Escape" && (activeTab = "MY_ASSETS")}
+                            role="button"
+                            tabindex="0"
+                        ></div>
+                        <div
+                            class="form-panel glass-form create-panel"
+                            on:click|stopPropagation
+                            on:keydown|stopPropagation
+                            role="presentation"
+                        >
+                            <div class="form-header">
+                                <button
+                                    class="back-btn"
+                                    on:click={() => (activeTab = "MY_ASSETS")}
+                                >
+                                    ← BACK
+                                </button>
+                                <span class="form-title"
+                                    >TRANSFER {selectedAsset || "ASSET"}</span
+                                >
+                            </div>
+                            <div class="compact-form">
+                                <!-- Select Asset -->
+                                <div class="form-row">
                                     <label for="tx-asset">SELECT ASSET</label>
                                     <select
                                         id="tx-asset"
                                         bind:value={selectedAsset}
                                         class="glass-input"
                                     >
-                                        {#each myAssets as item}
+                                        {#each myAssets.filter((a) => !a.name.endsWith("!")) as item}
                                             <option value={item.name}
-                                                >{item.name} • {item.balance}</option
+                                                >{item.name} • {formatBalance(
+                                                    item.balance,
+                                                )}</option
                                             >
                                         {/each}
                                     </select>
                                 </div>
-                                <div class="form-group wide">
-                                    <label for="tx-to">RECIPIENT ADDRESS</label>
-                                    <input
-                                        id="tx-to"
-                                        type="text"
-                                        class="glass-input mono"
-                                        placeholder="Enter address..."
-                                        bind:value={transferTo}
-                                    />
+                                <!-- Recipient + Amount row -->
+                                <div class="form-row split">
+                                    <div class="field">
+                                        <label for="tx-to"
+                                            >RECIPIENT ADDRESS</label
+                                        >
+                                        <input
+                                            id="tx-to"
+                                            type="text"
+                                            class="glass-input mono"
+                                            placeholder="Enter address..."
+                                            bind:value={transferTo}
+                                        />
+                                    </div>
+                                    <div class="field narrow">
+                                        <label for="tx-amt">AMOUNT</label>
+                                        <input
+                                            id="tx-amt"
+                                            type="number"
+                                            class="glass-input mono"
+                                            placeholder="0"
+                                            bind:value={transferAmt}
+                                        />
+                                    </div>
                                 </div>
-                                <div class="form-group narrow">
-                                    <label for="tx-amt">AMOUNT</label>
-                                    <input
-                                        id="tx-amt"
-                                        type="number"
-                                        class="glass-input mono"
-                                        placeholder="0"
-                                        bind:value={transferAmt}
-                                    />
+                                <!-- Action row -->
+                                <div class="form-actions">
+                                    <button
+                                        class="neon-btn compact"
+                                        style="margin-left:auto"
+                                        on:click={initiateTransfer}
+                                        disabled={!nodeOnline}
+                                    >
+                                        <span class="btn-glow"></span>
+                                        SEND TRANSFER
+                                    </button>
                                 </div>
-                            </div>
-                            <div class="form-footer">
-                                <button
-                                    class="neon-btn"
-                                    on:click={initiateTransfer}
-                                    disabled={!nodeOnline}
-                                >
-                                    <span class="btn-glow"></span>
-                                    SEND TRANSFER
-                                </button>
                             </div>
                         </div>
 
                         <!-- ═══════════════ ISSUE ═══════════════ -->
                     {:else if activeTab === "ISSUE"}
                         <div class="form-panel glass-form">
+                            <div class="form-header">
+                                <button
+                                    class="back-btn"
+                                    on:click={() => (activeTab = "MY_ASSETS")}
+                                    title="Back to Assets"
+                                >
+                                    ← Back
+                                </button>
+                                <span class="form-title"
+                                    >{issueType === "sub"
+                                        ? "CREATE SUB-ASSET"
+                                        : "CREATE ROOT ASSET"}</span
+                                >
+                            </div>
                             <div class="form-grid">
                                 <!-- Asset Type Toggle -->
                                 <div class="form-group full-width">
@@ -612,6 +717,18 @@
                         <!-- ═══════════════ REISSUE ═══════════════ -->
                     {:else if activeTab === "REISSUE"}
                         <div class="form-panel glass-form">
+                            <div class="form-header">
+                                <button
+                                    class="back-btn"
+                                    on:click={() => (activeTab = "MY_ASSETS")}
+                                    title="Back to Assets"
+                                >
+                                    ← Back
+                                </button>
+                                <span class="form-title"
+                                    >REISSUE {reissueAsset || "ASSET"}</span
+                                >
+                            </div>
                             <div class="form-grid">
                                 <div class="form-group wide">
                                     <label for="reissue-asset"
@@ -666,6 +783,124 @@
                                     <span class="btn-glow"></span>
                                     REISSUE ASSET
                                 </button>
+                            </div>
+                        </div>
+
+                        <!-- ═══════════════ CREATE ═══════════════ -->
+                    {:else if activeTab === "CREATE"}
+                        <!-- Click outside to go back -->
+                        <div
+                            class="create-backdrop"
+                            on:click={() => (activeTab = "MY_ASSETS")}
+                            on:keydown={(e) =>
+                                e.key === "Escape" && (activeTab = "MY_ASSETS")}
+                            role="button"
+                            tabindex="0"
+                        ></div>
+                        <div
+                            class="form-panel glass-form create-panel"
+                            on:click|stopPropagation
+                            on:keydown|stopPropagation
+                            role="presentation"
+                        >
+                            <div class="form-header">
+                                <button
+                                    class="back-btn"
+                                    on:click={() => (activeTab = "MY_ASSETS")}
+                                    title="Back to Assets"
+                                >
+                                    ← BACK
+                                </button>
+                                <span class="form-title">CREATE ROOT ASSET</span
+                                >
+                            </div>
+                            <div class="compact-form">
+                                <!-- Row 1: Asset Name -->
+                                <div class="form-row">
+                                    <label for="create-name">ASSET NAME</label>
+                                    <input
+                                        id="create-name"
+                                        type="text"
+                                        class="glass-input mono"
+                                        placeholder="MY_ASSET_NAME"
+                                        bind:value={issueName}
+                                    />
+                                    <span class="input-hint"
+                                        >A-Z, 0-9, underscores (3-30 chars)</span
+                                    >
+                                </div>
+                                <!-- Row 2: Quantity + Decimals -->
+                                <div class="form-row split">
+                                    <div class="field">
+                                        <label for="create-qty">QUANTITY</label>
+                                        <input
+                                            id="create-qty"
+                                            type="number"
+                                            class="glass-input mono"
+                                            placeholder="1"
+                                            bind:value={issueQty}
+                                        />
+                                    </div>
+                                    <div class="field narrow">
+                                        <label for="create-units"
+                                            >DECIMALS</label
+                                        >
+                                        <select
+                                            id="create-units"
+                                            bind:value={issueUnits}
+                                            class="glass-input"
+                                        >
+                                            {#each [0, 1, 2, 3, 4, 5, 6, 7, 8] as u}
+                                                <option value={String(u)}
+                                                    >{u}</option
+                                                >
+                                            {/each}
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- Row 3: IPFS -->
+                                <div class="form-row">
+                                    <label for="create-ipfs"
+                                        >IPFS HASH <span class="optional"
+                                            >(optional)</span
+                                        ></label
+                                    >
+                                    <input
+                                        id="create-ipfs"
+                                        type="text"
+                                        class="glass-input mono"
+                                        placeholder="Qm..."
+                                        bind:value={issueIpfs}
+                                    />
+                                </div>
+                                <!-- Row 4: Actions - Checkbox + Cost + Button -->
+                                <div class="form-actions">
+                                    <label class="checkbox-wrap">
+                                        <input
+                                            type="checkbox"
+                                            bind:checked={issueReissue}
+                                        />
+                                        <span class="checkbox-visual"></span>
+                                        <span class="checkbox-text"
+                                            >REISSUABLE</span
+                                        >
+                                    </label>
+                                    <span class="cost-tag"
+                                        >COST: <strong>0.25 HEMP</strong></span
+                                    >
+                                    <button
+                                        class="neon-btn compact"
+                                        on:click={() => {
+                                            issueType = "root";
+                                            initiateIssue();
+                                        }}
+                                        disabled={!nodeOnline ||
+                                            !issueName.trim()}
+                                    >
+                                        <span class="btn-glow"></span>
+                                        CREATE ASSET
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     {/if}
@@ -736,8 +971,25 @@
                             <div class="detail-grid">
                                 <div class="detail-stat">
                                     <div class="stat-label">YOUR BALANCE</div>
-                                    <div class="stat-value neon-text">
-                                        {selectedDetail.balance}
+
+                                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                    <div
+                                        class="stat-value neon-text interactive"
+                                        on:mouseenter={(e) =>
+                                            showTooltip(
+                                                e,
+                                                selectedDetail.balance,
+                                            )}
+                                        on:mouseleave={hideTooltip}
+                                        on:click={(e) =>
+                                            showTooltip(
+                                                e,
+                                                selectedDetail.balance,
+                                            )}
+                                        role="button"
+                                        tabindex="0"
+                                    >
+                                        {formatBalance(selectedDetail.balance)}
                                     </div>
                                 </div>
                                 <div class="detail-stat">
@@ -749,14 +1001,14 @@
                                     </div>
                                 </div>
                                 <div class="detail-stat">
-                                    <div class="stat-label">ADMIN RIGHTS</div>
+                                    <div class="stat-label">STATUS</div>
                                     <div
                                         class="stat-value"
                                         class:owner-yes={selectedDetail.hasOwner}
                                     >
                                         {selectedDetail.hasOwner
-                                            ? "👑 CAN REISSUE"
-                                            : "HOLDER ONLY"}
+                                            ? "👑 OWNER"
+                                            : "🔒 LOCKED"}
                                     </div>
                                 </div>
                                 <div class="detail-stat">
@@ -782,8 +1034,26 @@
                                         <span class="meta-label"
                                             >TOTAL SUPPLY</span
                                         >
-                                        <span class="meta-value"
-                                            >{assetMetadata.amount.toLocaleString()}</span
+
+                                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                        <span
+                                            class="meta-value interactive"
+                                            on:mouseenter={(e) =>
+                                                showTooltip(
+                                                    e,
+                                                    assetMetadata.amount.toLocaleString(),
+                                                )}
+                                            on:mouseleave={hideTooltip}
+                                            on:click={(e) =>
+                                                showTooltip(
+                                                    e,
+                                                    assetMetadata.amount.toLocaleString(),
+                                                )}
+                                            role="button"
+                                            tabindex="0"
+                                            >{formatBalance(
+                                                assetMetadata.amount,
+                                            )}</span
                                         >
                                     </div>
                                     <div class="meta-row">
@@ -910,41 +1180,11 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0 1rem;
+        padding: 0.5rem 1rem;
         background: rgba(0, 0, 0, 0.4);
         border-bottom: 1px solid rgba(0, 255, 65, 0.1);
         flex-shrink: 0;
-    }
-    .nav-tabs {
-        display: flex;
-        gap: 0;
-    }
-    .nav-tab {
-        background: transparent;
-        border: none;
-        color: #555;
-        padding: 0.8rem 1.2rem;
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 1.5px;
-        border-bottom: 2px solid transparent;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .nav-tab:hover {
-        color: #aaa;
-        background: rgba(255, 255, 255, 0.02);
-    }
-    .nav-tab.active {
-        color: var(--color-primary);
-        border-bottom-color: var(--color-primary);
-        text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
-    }
-    .tab-icon {
-        font-size: 0.9rem;
+        min-height: 44px;
     }
     .header-status {
         display: flex;
@@ -953,6 +1193,46 @@
         font-size: 0.65rem;
         color: #555;
         letter-spacing: 1px;
+    }
+    .header-left {
+        display: flex;
+        align-items: center;
+    }
+    .header-title {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--color-primary);
+        letter-spacing: 2px;
+        text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    }
+    .header-actions {
+        display: flex;
+        gap: 0.6rem;
+        margin-left: auto;
+        margin-right: 1rem;
+        overflow: visible;
+    }
+    .header-btn {
+        background: rgba(0, 255, 65, 0.05);
+        border: 1px solid rgba(0, 255, 65, 0.25);
+        color: var(--color-primary);
+        padding: 0.45rem 0.85rem;
+        font-size: 0.55rem;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-transform: uppercase;
+    }
+    .header-btn:hover:not(:disabled) {
+        background: rgba(0, 255, 65, 0.12);
+        border-color: rgba(0, 255, 65, 0.5);
+        text-shadow: 0 0 6px rgba(0, 255, 65, 0.4);
+    }
+    .header-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
     }
     .pulse-dot {
         width: 6px;
@@ -985,6 +1265,76 @@
         flex: 1;
         padding: 1.5rem;
         overflow-y: auto;
+    }
+
+    /* ═══════════════ CREATE FORM COMPACT ═══════════════ */
+    .create-backdrop {
+        position: absolute;
+        inset: 0;
+        background: transparent;
+        z-index: 1;
+        cursor: pointer;
+    }
+    .create-panel {
+        position: relative;
+        z-index: 2;
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    .compact-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+    .form-row.split {
+        flex-direction: row;
+        gap: 0.6rem;
+    }
+    .form-row.split .field {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+    .form-row.split .field.narrow {
+        flex: 0 0 90px;
+    }
+    .form-row label {
+        font-size: 0.5rem;
+        color: #555;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        margin-bottom: 0.1rem;
+    }
+    .form-row .optional {
+        color: #333;
+        font-weight: normal;
+    }
+    .form-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        padding-top: 0.4rem;
+        margin-top: 0.2rem;
+    }
+    .cost-tag {
+        font-size: 0.5rem;
+        color: #555;
+        letter-spacing: 0.5px;
+    }
+    .cost-tag strong {
+        color: var(--color-primary);
+        font-weight: 600;
+    }
+    .neon-btn.compact {
+        margin-left: auto;
+        padding: 0.5rem 1rem;
+        font-size: 0.6rem;
     }
 
     /* ═══════════════ ASSET GRID (Card Layout) ═══════════════ */
@@ -1117,6 +1467,40 @@
         box-shadow: 0 0 15px var(--color-primary);
     }
 
+    /* Form Header with Back Button */
+    .form-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .form-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-primary);
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    }
+    .back-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #888;
+        padding: 0.35rem 0.7rem;
+        font-size: 0.65rem;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .back-btn:hover {
+        background: rgba(0, 255, 65, 0.1);
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+    }
+
     .empty-state {
         grid-column: 1 / -1;
         text-align: center;
@@ -1200,9 +1584,6 @@
         display: flex;
         flex-direction: column;
         gap: 0.4rem;
-    }
-    .form-group.full {
-        grid-column: span 12;
     }
     .form-group.full-width {
         grid-column: span 12;
@@ -1584,6 +1965,9 @@
         color: #fff;
         font-family: var(--font-mono);
     }
+    .interactive {
+        cursor: pointer;
+    }
     .stat-value.neon-text {
         color: var(--color-primary);
         text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
@@ -1686,5 +2070,23 @@
     }
     .tab-content::-webkit-scrollbar-thumb:hover {
         background: var(--color-primary);
+    }
+
+    /* Custom Tooltip */
+    .custom-tooltip {
+        position: fixed;
+        background: rgba(10, 15, 12, 0.98);
+        border: 1px solid rgba(0, 255, 65, 0.3);
+        color: #fff;
+        padding: 0.5rem 0.8rem;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-family: var(--font-mono);
+        z-index: 9999;
+        pointer-events: none;
+        transform: translate(-50%, -100%);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        white-space: nowrap;
+        text-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
     }
 </style>

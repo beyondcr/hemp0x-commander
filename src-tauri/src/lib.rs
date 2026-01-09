@@ -1006,6 +1006,106 @@ fn get_asset_data(name: String) -> Result<AssetData, String> {
   })
 }
 
+/// List assets on the network (not just owned). Supports wildcards like "HEMP*"
+#[tauri::command]
+fn list_network_assets(pattern: String, verbose: bool) -> Result<String, String> {
+  ensure_config()?;
+  let search = if pattern.is_empty() { String::from("*") } else { pattern };
+  let verbose_str = if verbose { String::from("true") } else { String::from("false") };
+  run_cli(&[String::from("listassets"), search, verbose_str, String::from("50")]) // Limit to 50 results
+}
+
+/// Check if user owns the ownership token (ASSET!) for a given asset
+#[tauri::command]
+fn check_ownership_token(asset_name: String) -> Result<bool, String> {
+  ensure_config()?;
+  // The ownership token is the asset name with "!" suffix
+  let ownership_token = format!("{}!", asset_name.trim_end_matches('!'));
+  let raw = run_cli(&[String::from("listmyassets"), ownership_token.clone(), String::from("true")])?;
+  let value: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+  
+  // If the result contains the ownership token with balance > 0, user owns it
+  if let Some(obj) = value.as_object() {
+    if let Some(asset_info) = obj.get(&ownership_token) {
+      if let Some(balance) = asset_info.get("balance").and_then(|v| v.as_f64()) {
+        return Ok(balance > 0.0);
+      }
+    }
+  }
+  Ok(false)
+}
+
+/// Reissue (increase supply) of an existing asset
+#[tauri::command]
+fn reissue_asset(
+  name: String,
+  qty: String,
+  to_address: String,
+  change_verifier: bool,
+  new_verifier: String,
+  new_ipfs: String,
+) -> Result<String, String> {
+  ensure_config()?;
+  let qty_val: f64 = qty
+    .trim()
+    .parse()
+    .map_err(|_| "Quantity must be a number".to_string())?;
+  
+  let mut args = vec![
+    String::from("reissue"),
+    name,
+    format!("{qty_val}"),
+    to_address,
+  ];
+  
+  // Add optional parameters if provided
+  if change_verifier {
+    args.push(String::from("true"));
+    args.push(new_verifier);
+  }
+  
+  if !new_ipfs.is_empty() {
+    // Ensure we have verifier args first
+    if args.len() < 6 {
+      args.push(String::from("false"));
+      args.push(String::new());
+    }
+    args.push(new_ipfs);
+  }
+  
+  run_cli(&args)
+}
+
+/// Issue unique (NFT) assets from a root asset
+#[tauri::command]
+fn issue_unique_asset(
+  root_name: String,
+  tags: Vec<String>,
+  ipfs_hashes: Vec<String>,
+) -> Result<String, String> {
+  ensure_config()?;
+  
+  if tags.is_empty() {
+    return Err("At least one tag is required".to_string());
+  }
+  
+  // Build JSON array strings for the RPC call
+  let tags_json = serde_json::to_string(&tags).map_err(|e| e.to_string())?;
+  
+  let ipfs_json = if !ipfs_hashes.is_empty() && ipfs_hashes.iter().any(|h| !h.is_empty()) {
+    serde_json::to_string(&ipfs_hashes).map_err(|e| e.to_string())?
+  } else {
+    String::from("[]")
+  };
+  
+  run_cli(&[
+    String::from("issueunique"),
+    root_name,
+    tags_json,
+    ipfs_json,
+  ])
+}
+
 // Minimum required version
 const MIN_VERSION: (u32, u32, u32) = (4, 7, 0);
 
@@ -1832,6 +1932,10 @@ pub fn run() {
       load_address_book,
       save_address_book,
       get_asset_data,
+      list_network_assets,
+      check_ownership_token,
+      reissue_asset,
+      issue_unique_asset,
       extract_snapshot
     ])
     .run(tauri::generate_context!())
