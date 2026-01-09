@@ -956,7 +956,7 @@
     </div>
 {/if}
 
-<style>
+<style lang="css">
     /* --- VIEW CONTAINER --- */
     .view-hud {
         height: 100%;
