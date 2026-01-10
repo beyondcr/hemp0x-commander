@@ -1,6 +1,7 @@
 <script>
     import { onMount } from "svelte";
     import { fly, fade, scale } from "svelte/transition";
+    import { flip } from "svelte/animate";
     import { core } from "@tauri-apps/api";
     import ModalConfirm from "./modals/ModalConfirm.svelte";
     import ModalAssetDetail from "./modals/ModalAssetDetail.svelte";
@@ -10,6 +11,9 @@
     import ModalTransfer from "./modals/ModalTransfer.svelte";
     import ModalReissue from "./modals/ModalReissue.svelte";
     import ModalBrowse from "./modals/ModalBrowse.svelte";
+    import Tooltip from "./ui/Tooltip.svelte";
+    import eyeOpen from "../assets/eye-open.png";
+    import eyeClosed from "../assets/eye-closed.png";
 
     let myAssets = [];
     let tauriReady = false;
@@ -60,6 +64,12 @@
     let confirmPayload = null;
     let confirmType = "";
 
+    // Persistent UI State
+    let showHidden = false;
+    let hiddenAssets = new Set();
+    let assetOrder = [];
+    let draggingItem = null;
+
     // Allow parent to pass initial state
 
     import { nodeStatus } from "../stores.js";
@@ -75,7 +85,54 @@
             // Try to refresh assets, will fail gracefully if node is offline
             await refreshAssets();
         }
+
+        // Global DnD Fix: Explicitly allow 'move' everywhere to prevent forbidden cursor
+        const handleGlobalDrag = (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move"; // CRITICAL: Must match effectAllowed
+            return false;
+        };
+        window.addEventListener("dragover", handleGlobalDrag, false);
+        window.addEventListener("drop", (e) => e.preventDefault(), false); // Prevent actual file open behavior
+
+        // Load UI settings from backend
+        try {
+            const settings = await core.invoke("load_app_settings");
+            if (settings.hidden_assets)
+                hiddenAssets = new Set(settings.hidden_assets);
+            if (settings.asset_order) assetOrder = settings.asset_order;
+        } catch (err) {
+            console.warn("Failed to load app settings:", err);
+            // Fallback to localStorage for compatibility or first run
+            const savedHidden = localStorage.getItem("hemp0x_hidden_assets");
+            if (savedHidden) {
+                try {
+                    hiddenAssets = new Set(JSON.parse(savedHidden));
+                } catch (e) {}
+            }
+            const savedOrder = localStorage.getItem("hemp0x_asset_order");
+            if (savedOrder) {
+                try {
+                    assetOrder = JSON.parse(savedOrder);
+                } catch (e) {}
+            }
+        }
     });
+
+    // Save helpers
+    async function persistSettings() {
+        if (!tauriReady) return;
+        try {
+            // We need to preserve other settings (hide_balance etc) so we should ideally load first or just partial update if we had a partial update command.
+            // For now, let's load current, update ours, and save.
+            let current = await core.invoke("load_app_settings");
+            current.hidden_assets = [...hiddenAssets];
+            current.asset_order = assetOrder;
+            await core.invoke("save_app_settings", { settings: current });
+        } catch (e) {
+            console.warn("Persist failed:", e);
+        }
+    }
 
     // Re-check when parent state changes
     $: if (tauriReady && isNodeOnline) {
@@ -144,8 +201,111 @@
             }
         }
 
-        return Array.from(groups.values());
+        let results = Array.from(groups.values());
+
+        // 1. FILTER: Remove hidden (unless showHidden is true)
+        if (!showHidden) {
+            results = results.filter((a) => !hiddenAssets.has(a.name));
+        }
+
+        // 2. SORT: Use persisted order
+        if (assetOrder.length > 0) {
+            const orderMap = new Map(assetOrder.map((n, i) => [n, i]));
+            results.sort((a, b) => {
+                const idxA = orderMap.has(a.name)
+                    ? orderMap.get(a.name)
+                    : 99999;
+                const idxB = orderMap.has(b.name)
+                    ? orderMap.get(b.name)
+                    : 99999;
+
+                // Secondary sort: Owner tokens first, then alphabetic
+                if (idxA === 99999 && idxB === 99999) {
+                    if (a.hasOwner && !b.hasOwner) return -1;
+                    if (!a.hasOwner && b.hasOwner) return 1;
+                    return a.name.localeCompare(b.name);
+                }
+                return idxA - idxB;
+            });
+        }
+
+        return results;
     })();
+
+    // --- UI ACTIONS ---
+    function toggleHide(e, assetName) {
+        e.stopPropagation();
+        if (hiddenAssets.has(assetName)) {
+            hiddenAssets.delete(assetName);
+        } else {
+            hiddenAssets.add(assetName);
+        }
+        hiddenAssets = hiddenAssets; // trigger reactivity
+        persistSettings();
+    }
+
+    function handleDragStart(e, asset) {
+        draggingItem = asset;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", asset.name);
+        // HACK: Delay adding class to avoid browser canceling drag immediately
+        setTimeout(() => document.body.classList.add("dragging-active"), 0);
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        return false;
+    }
+
+    let lastSwap = 0;
+
+    function handleDragEnter(e, targetAsset) {
+        // Debounce swaps to prevent fluttering (rapid oscillations)
+        const now = Date.now();
+        if (now - lastSwap < 150) return;
+
+        // Real-time Sort: Swap items as we drag over them
+        if (!draggingItem || draggingItem.name === targetAsset.name) return;
+
+        // Create initial order if empty
+        if (assetOrder.length === 0) {
+            assetOrder = groupedAssets.map((a) => a.name);
+        }
+
+        let currentOrder = [...assetOrder];
+
+        // Ensure completeness
+        groupedAssets.forEach((a) => {
+            if (!currentOrder.includes(a.name)) currentOrder.push(a.name);
+        });
+
+        const fromIdx = currentOrder.indexOf(draggingItem.name);
+        const toIdx = currentOrder.indexOf(targetAsset.name);
+
+        if (fromIdx !== -1 && toIdx !== -1) {
+            // Move item
+            currentOrder.splice(fromIdx, 1);
+            currentOrder.splice(toIdx, 0, draggingItem.name);
+            assetOrder = currentOrder;
+            lastSwap = now;
+        }
+    }
+
+    function handleDragEnd(e) {
+        document.body.classList.remove("dragging-active");
+        draggingItem = null;
+    }
+
+    function handleDrop(e, targetAsset) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.body.classList.remove("dragging-active");
+        draggingItem = null;
+        // Just save the final state
+        persistSettings();
+    }
 
     import { formatBalance } from "./utils.js";
 
@@ -376,6 +536,20 @@
             <div class="header-left">
                 <span class="header-title">◈ MY ASSETS</span>
             </div>
+            <div class="header-options">
+                <Tooltip
+                    text={showHidden ? "Hide hidden" : "Show hidden assets"}
+                >
+                    <label class="toggle-hidden">
+                        <input type="checkbox" bind:checked={showHidden} />
+                        <img
+                            src={showHidden ? eyeOpen : eyeClosed}
+                            alt="Visibility"
+                            class="eye-icon-img"
+                        />
+                    </label>
+                </Tooltip>
+            </div>
             <div class="header-actions">
                 <button
                     class="header-btn create-btn"
@@ -406,24 +580,56 @@
         <div class="content-area">
             <div class="tab-content">
                 <!-- ═══════════════ MY ASSETS ═══════════════ -->
-                <div class="asset-grid">
-                    {#each groupedAssets as asset, i}
+                <div
+                    class="asset-grid"
+                    on:dragover={handleDragOver}
+                    on:drop={handleDragEnd}
+                    role="group"
+                >
+                    {#each groupedAssets as asset (asset.name)}
                         <div
                             class="asset-card glass-card"
                             class:has-owner={asset.hasOwner}
                             class:is-sub-asset={asset.isSubAsset}
+                            class:is-hidden={hiddenAssets.has(asset.name)}
                             role="button"
                             tabindex="0"
+                            draggable="true"
+                            on:dragstart={(e) => handleDragStart(e, asset)}
+                            on:dragover={handleDragOver}
+                            on:dragenter={(e) => handleDragEnter(e, asset)}
+                            on:dragend={handleDragEnd}
+                            on:drop={(e) => handleDrop(e, asset)}
+                            animate:flip={{ duration: 300 }}
                             on:click={() => openDetail(asset)}
                             on:keydown={(e) =>
                                 e.key === "Enter" && openDetail(asset)}
-                            in:fly={{
-                                y: 20,
-                                delay: i * 40,
-                                duration: 300,
-                            }}
                         >
                             <div class="card-glow"></div>
+
+                            <!-- Hide Toggle -->
+                            <div class="hide-btn-frame">
+                                <Tooltip
+                                    text={hiddenAssets.has(asset.name)
+                                        ? "Unhide Asset"
+                                        : "Hide Asset"}
+                                >
+                                    <button
+                                        class="hide-btn"
+                                        on:click={(e) =>
+                                            toggleHide(e, asset.name)}
+                                    >
+                                        <img
+                                            src={hiddenAssets.has(asset.name)
+                                                ? eyeOpen
+                                                : eyeClosed}
+                                            alt="Hide"
+                                            class="card-eye-icon"
+                                        />
+                                    </button>
+                                </Tooltip>
+                            </div>
+
                             {#if asset.hasOwner}
                                 <div
                                     class="owner-badge"
@@ -640,7 +846,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 0 1rem;
+        padding: 5px 1rem; /* Added vertical padding for button glows/borders */
         background: rgba(0, 0, 0, 0.4);
         border-bottom: 1px solid rgba(0, 255, 65, 0.1);
         flex-shrink: 0;
@@ -657,6 +863,36 @@
     .header-left {
         display: flex;
         align-items: center;
+    }
+    .header-options {
+        margin-left: 1rem;
+        display: flex;
+        align-items: center;
+    }
+    .toggle-hidden {
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: all 0.2s;
+    }
+    .toggle-hidden:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    .toggle-hidden input {
+        display: none;
+    }
+    .eye-icon-img {
+        width: 20px;
+        height: 20px;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    .toggle-hidden:hover .eye-icon-img {
+        opacity: 1;
     }
     .header-title {
         font-size: 0.85rem;
@@ -738,14 +974,23 @@
         gap: 1rem;
     }
     .asset-card {
+        user-select: none;
+        -webkit-user-select: none;
         position: relative;
         background: rgba(0, 0, 0, 0.3);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
         padding: 1.2rem;
-        cursor: pointer;
+        cursor: grab;
         transition: all 0.25s;
-        overflow: hidden;
+        overflow: visible !important; /* Allow tooltip to break out */
+    }
+    .asset-card img {
+        -webkit-user-drag: none;
+        pointer-events: none;
+    }
+    .asset-card:active {
+        cursor: grabbing;
     }
     .asset-card:hover {
         border-color: rgba(0, 255, 65, 0.4);
@@ -792,6 +1037,55 @@
         font-size: 0.8rem;
         color: #888;
         z-index: 2;
+    }
+
+    /* Hide Button */
+    .hide-btn-frame {
+        position: absolute;
+        top: 8px;
+        right: 32px; /* Next to crown/badge */
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.2s;
+        transform: translateY(-5px);
+    }
+    .asset-card {
+        overflow: visible !important; /* Allow tooltip to break out */
+    }
+    .asset-card:hover .hide-btn-frame {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    .hide-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .hide-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+    .card-eye-icon {
+        width: 16px;
+        height: 16px;
+        opacity: 0.7;
+    }
+    .hide-btn:hover .card-eye-icon {
+        opacity: 1;
+    }
+
+    /* Hidden State */
+    .asset-card.is-hidden {
+        opacity: 0.5;
+        border: 1px dashed #444;
+        filter: grayscale(0.8);
+    }
+    .asset-card.is-hidden:hover {
+        opacity: 0.8;
     }
 
     /* Highlight cards with owner tokens */
@@ -908,5 +1202,10 @@
     }
     .tab-content::-webkit-scrollbar-thumb:hover {
         background: var(--color-primary);
+    }
+
+    /* Dragging Fix: Disable pointer events on children during drag */
+    :global(body.dragging-active) .asset-card * {
+        pointer-events: none !important;
     }
 </style>

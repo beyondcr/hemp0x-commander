@@ -12,7 +12,7 @@ use rand::distributions::Alphanumeric;
 use std::os::unix::fs::PermissionsExt;
 
 // Import local modules
-use crate::modules::models::{ConfigPaths, DataFolderInfo, BinaryStatus, AddressBookEntry};
+use crate::modules::models::{ConfigPaths, DataFolderInfo, BinaryStatus, AddressBookEntry, AppSettings};
 use crate::modules::utils::{resolve_bin, bin_name, calculate_dir_size, format_size};
 
 pub fn data_dir() -> Result<PathBuf, String> {
@@ -82,6 +82,29 @@ pub fn load_address_book() -> Result<Vec<AddressBookEntry>, String> {
 pub fn save_address_book(entries: Vec<AddressBookEntry>) -> Result<(), String> {
   let path = address_book_path()?;
   let content = serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?;
+  fs::write(&path, content).map_err(|e| e.to_string())?;
+  Ok(())
+}
+
+fn app_settings_path() -> Result<PathBuf, String> {
+  Ok(data_dir()?.join("app_settings.json"))
+}
+
+#[tauri::command]
+pub fn load_app_settings() -> Result<AppSettings, String> {
+  let path = app_settings_path()?;
+  if !path.exists() {
+    return Ok(AppSettings::default());
+  }
+  let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+  let settings: AppSettings = serde_json::from_str(&content).unwrap_or_default();
+  Ok(settings)
+}
+
+#[tauri::command]
+pub fn save_app_settings(settings: AppSettings) -> Result<(), String> {
+  let path = app_settings_path()?;
+  let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
   fs::write(&path, content).map_err(|e| e.to_string())?;
   Ok(())
 }

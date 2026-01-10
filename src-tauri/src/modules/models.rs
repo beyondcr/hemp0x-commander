@@ -64,6 +64,7 @@ pub struct AssetItem {
   pub balance: String,
   #[serde(rename = "type")]
   pub asset_type: String,
+  pub asset_type_label: Option<String>,
 }
 
 #[derive(Serialize, serde::Deserialize)]
@@ -135,4 +136,13 @@ pub struct DataFolderInfo {
 pub struct RawTxInput {
   pub txid: String,
   pub vout: u64,
+}
+
+#[derive(Serialize, serde::Deserialize, Default)]
+pub struct AppSettings {
+  pub hide_balance: bool,
+  pub hide_activity: bool,
+  pub show_welcome: bool,
+  pub hidden_assets: Vec<String>,
+  pub asset_order: Vec<String>,
 }

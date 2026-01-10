@@ -87,6 +87,8 @@ pub fn run() {
       files::write_text_file,
       files::check_config_exists,
       files::get_data_folder_info,
+      files::load_app_settings,
+      files::save_app_settings,
       
       // Additional Commands
       commands::backup_wallet,

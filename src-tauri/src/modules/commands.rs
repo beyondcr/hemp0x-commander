@@ -406,6 +406,7 @@ pub fn list_assets() -> Result<Vec<AssetItem>, String> {
         name: name.to_string(),
         balance: format!("{:.8}", amount),
         asset_type: asset_type.to_string(),
+        asset_type_label: None,
       });
     }
   }

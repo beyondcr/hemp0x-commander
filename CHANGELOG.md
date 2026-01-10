@@ -4,6 +4,13 @@ All notable changes to Hemp0x Commander are documented here.
 
 ## [1.3.0] (WIP) - 2026-01-08
 
+### Added
+- Sort and Hide assets function added
+- Added "Hide Asset" toggle to asset cards
+- Added "Show Hidden" global toggle in toolbar
+- Implemented drag-and-drop reordering for assets
+- Persisted asset order and visibility settings to `app_settings.json`
+
 ### New Features
 - **Major Code Base Refactor** - Complete modularization of backend and frontend for stability and maintainability
 - **Snapshot Installer** - Install blockchain snapshots from `.7z` archives directly in the app
