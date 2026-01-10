@@ -6,7 +6,6 @@
     import CryptoJS from "crypto-js";
     import { systemStatus } from "../../stores.js"; // Import Store
 
-    // export let tauriReady = false; // DEPRECATED
     $: tauriReady = $systemStatus.tauriReady;
     export let isProcessing = false;
     export let processingMessage = "";
@@ -338,25 +337,7 @@
         if (!tauriReady) return;
         keyModalMode = "import";
         showKeyModal = true;
-        keyList = []; // Clear list for import selection later? No, import reads from file usually
-        // Actually for import, we usually show a file dialog or load from a file content.
-        // Let's check original logic.
-        // Original logic: openImportModal just sets mode and shows modal.
-        // And inside modal, we probably triggerImport or something.
-        // Wait, original openImportModal logic was missing in my view, assuming standard toggle.
-        // Looking at markup: <button class="cyber-btn" on:click={executeImport}>IMPORT SELECTED</button>
-        // But before that, we need to populate keyList (from file).
-        // The original had "triggerImport" in AddressBook popup? No, ViewTools has explicit Import Logic.
-        // The Key Modal in ViewTools shows "Import Selected".
-        // Ah, `executeImport` reads `keyList` which must be populated.
-        // How is `keyList` populated for Import?
-        // Ah, there is no "Browse" button visible in the modal markup I saw in previous steps.
-        // Re-reading ViewTools (lines 1100-1200):
-        // It has `async function triggerImport() { ... readFile ... keyList = parsed ... }`
-        // I missed `triggerImport` in my listing.
-        // I need to add `triggerImport` logic here. I'll just initiate `triggerImport` immediately when opening Import Modal?
-        // Or adding a "Load File" button in the modal if list is empty.
-        // Let's add a `triggerImport` function and call it.
+        keyList = [];
         triggerImport();
     }
 
@@ -408,13 +389,7 @@
                 let data = JSON.parse(content);
                 // Check if encrypted
                 if (data.encrypted && data.content) {
-                    // Ask for password to decrypt file content (client side)
-                    // We can reuse showExportEncryptModal logic or simpler prompt
-                    // Since I'm in a modal, let's use a prompt or reuse logic.
-                    // For simplicity, I'll assume unencrypted import for now OR
-                    // Re-implement the decryption logic I saw earlier.
-                    // I will add the decryption logic.
-                    decryptImportedFile(data); // Placeholder
+                    decryptImportedFile(data);
                 } else {
                     if (Array.isArray(data)) {
                         keyList = data.map((k) => ({ ...k, selected: true }));
@@ -487,24 +462,14 @@
     }
 
     async function executeExport() {
-        // First check if wallet is locked (invoke 'getwalletinfo' or try dummy sign?)
-        // If locked, showUnlockModal.
-        // Assuming we need to check lock status.
-        // Ideally we try to dump priv key for first selected. If fail code -13, then unlock.
-        // For simplicity, let's just try to export one.
         const selected = keyList.filter((k) => k.selected);
         if (selected.length === 0) {
             showToast("Select at least one key", "warning");
             return;
         }
 
-        // We can just try to unlock first if we suspect it's locked, or proceed.
-        // Let's try proceed, catch error.
         try {
-            // To verify lock status without error spam, we could check 'getwalletinfo'.
-            // I'll just show unlock modal if I catch a lock error.
             unlockingFile = false;
-            // But first, ask for Encryption of the EXPORT FILE.
             showExportEncryptModal = true;
         } catch (e) {
             console.error(e);
@@ -521,8 +486,6 @@
         // Check wallet lock by trying to dump one key
         // If fail, show wallet unlock modal.
         // If success, proceed.
-        // Actually best flow: Unlock Wallet -> Then Dump -> Then Encrypt & Save.
-        // Let's assume wallet might be locked.
         showUnlockModal = true; // Use tryUnlockWallet to gate this
     }
 
@@ -600,11 +563,6 @@
 
         for (const item of selected) {
             try {
-                // importprivkey "hemp0xprivkey" "label" rescan
-                // We only rescan on the LAST one if requested, else false.
-                // Optimization: rescan=false for all, then manual rescan?
-                // Or user 'importRescan' flag only on last?
-                // Actually importing taking time.
                 await core.invoke("import_priv_key", {
                     privKey: item.privKey,
                     label: item.label || "",

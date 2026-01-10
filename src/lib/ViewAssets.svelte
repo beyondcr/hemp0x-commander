@@ -61,7 +61,7 @@
     let confirmType = "";
 
     // Allow parent to pass initial state
-    // export let isNodeOnline = false; // DEPRECATED: Replaced by store
+
     import { nodeStatus } from "../stores.js";
     $: isNodeOnline = $nodeStatus.online;
 

@@ -17,7 +17,7 @@
     async function refreshList() {
         if (!tauriReady) {
             status = "Tauri backend not available.";
-            // isNodeOnline = false; // Removed: Store is source of truth
+
             return;
         }
         try {
@@ -25,7 +25,6 @@
                 showChange,
             });
             status = "";
-            // isNodeOnline = true; // Removed
         } catch (err) {
             // Show friendly message for connection errors
             const errStr = String(err || "");
@@ -35,10 +34,8 @@
                 errStr.includes("RPC")
             ) {
                 status = "Node not connected - Start node to load addresses";
-                // isNodeOnline = false; // Removed
             } else {
                 status = `Error: ${err}`;
-                // isNodeOnline = true; // Removed
             }
         }
     }

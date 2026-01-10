@@ -5,7 +5,7 @@ pub mod modules;
 use modules::commands;
 use modules::process;
 use modules::files;
-// use modules::utils; // Unused in lib.rs logic
+
 
 
 
@@ -88,7 +88,7 @@ pub fn run() {
       files::check_config_exists,
       files::get_data_folder_info,
       
-      // Commands from modules::commands (late additions)
+      // Additional Commands
       commands::backup_wallet,
       commands::backup_wallet_to,
     ])

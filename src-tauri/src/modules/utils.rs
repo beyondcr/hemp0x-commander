@@ -42,7 +42,7 @@ pub fn resolve_bin(name: &str) -> String {
   }
   
   // NOTE: CARGO_MANIFEST_DIR is compile time check, might need passing in or logic change if not available in library?
-  // Actually env! works in lib crate too.
+
   let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| String::from("."));
   add_bin_candidates(&mut candidates, PathBuf::from(manifest), name, 5);
   
