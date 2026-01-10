@@ -23,7 +23,7 @@
     $: walletInfo = $walletStore;
     $: nodeInfo = {
         state: $nodeStatus.online ? "RUNNING" : "OFFLINE",
-        synced: true, // Simplified for now
+        synced: true,
     };
 
     // Reactive checks derived from props/stores
@@ -454,7 +454,6 @@
                 throw "Insufficient inputs selected for Amount + Fee";
             }
 
-            // 1. Get Change Address
             // 1. Get Raw Change Address
             const changeAddr = await core.invoke("get_change_address");
 

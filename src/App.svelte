@@ -8,9 +8,8 @@
     walletInfo as walletStore,
     networkInfo,
     systemStatus as systemStore,
-  } from "./stores.js"; // IMPORT STORES
+  } from "./stores.js";
 
-  // Window resize lock removed to keep tab interactions responsive.
   import logoNew from "./assets/logonew.png";
   import eyeOpen from "./assets/eye-open.png";
   import eyeClosed from "./assets/eye-closed.png";
@@ -160,7 +159,7 @@
       error: reason,
     });
     walletStore.set({
-      balance: 0.0,
+      balance: "0.00",
       unconfirmed: 0.0,
       immature: 0.0,
       transactions: [],
@@ -196,7 +195,7 @@
       });
 
       walletStore.set({
-        balance: parseFloat(data.wallet.balance) || 0.0,
+        balance: data.wallet.balance || "0.00",
         unconfirmed: parseFloat(data.wallet.pending) || 0.0,
         immature: parseFloat(data.wallet.staked) || 0.0,
         transactions: data.tx || [],
@@ -344,7 +343,6 @@
 
     let unlistenNetwork;
     if (tauriReady) {
-      core.invoke("init_config");
       // Load Network Mode
       core
         .invoke("get_network_mode")
@@ -418,7 +416,7 @@
     <div class="window-controls">
       <div class="status-stack">
         <div class="traffic-lights">
-          <!-- Status Traffic Lights: Green=All Systems Go, Yellow=Syncing, Red=Offline -->
+          <!-- Status Traffic Lights -->
           <span
             class="status-dot green"
             class:active={systemStatus === "green"}

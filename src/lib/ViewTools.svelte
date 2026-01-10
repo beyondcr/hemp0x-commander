@@ -10,13 +10,12 @@
   import ToolsConsole from "./tools/ToolsConsole.svelte";
   import ToolsWallet from "./tools/ToolsWallet.svelte";
   import ToolsNetwork from "./tools/ToolsNetwork.svelte";
-  import { nodeStatus } from "../stores.js"; // Import Store
+  import { nodeStatus } from "../stores.js";
 
   let activeSubTab = "CONSOLE";
-  let networkMode = "mainnet"; // Restored missing state
+  let networkMode = "mainnet";
   let tauriReady = false;
 
-  // Toast System
   let toastMsg = "";
   let toastType = "info"; // info, error, success
   let toastTimer;
@@ -30,11 +29,9 @@
     }, 3000);
   }
 
-  // Persistent Props
   export let consoleOutput = "";
   export let consoleHistory = [];
 
-  // Refactored to use Store
   $: isNodeOnline = $nodeStatus.online;
 
   async function openDataDir() {
@@ -52,7 +49,6 @@
     }
   }
 
-  // Data Folder Info
   let dataFolderInfo = {
     path: "--",
     size_display: "--",
@@ -186,9 +182,7 @@
     snapshotFilePath = "";
   }
 
-  // ============ UPDATE TAB ============
   // APP_VERSION imported from constants.js
-  // TODO: Replace with official update server or Load Balancer
   const UPDATE_SERVER = "https://updates.hemp0x.com/";
 
   let updateInfo = {
@@ -238,12 +232,6 @@
           networkMode = parsed.chain;
         } else if (parsed.testnet === true) {
           networkMode = "testnet";
-          // Basic detection of regtest from other signals if needed,
-          // but usually chain is present or testnet=true covers non-mainnet.
-          // If manual regtest check needed:
-          if (parsed.difficulty < 0.001 && parsed.blocks < 1000) {
-            // Heuristic fallback if chain missing
-          }
         } else {
           networkMode = "mainnet";
         }
@@ -276,8 +264,6 @@
     }
 
     try {
-      // Note: In Tauri, we'd need to use tauri's http client or a backend command
-      // For now, this is a placeholder that simulates the check
       const response = await fetch(`${UPDATE_SERVER}version.json`, {
         method: "GET",
         mode: "no-cors",
@@ -315,7 +301,6 @@
     }
   }
 
-  // Config
   let configText = "";
   async function loadConfig(silent = false) {
     if (!tauriReady) return;
@@ -323,7 +308,6 @@
       configText = await core.invoke("read_config");
       if (!silent) showToast("Configuration Loaded", "success");
     } catch (err) {
-      // If failed, maybe file doesn't exist, just show empty
       if (!silent) showToast("Config missing or empty", "info");
     }
   }
@@ -338,7 +322,6 @@
     }
   }
 
-  // Logs
   let logText = "";
   async function refreshLog(silent = false) {
     if (!tauriReady) return;
@@ -354,7 +337,6 @@
     showToast("Log View Cleared", "info");
   }
 
-  // Fallback Save Log (Browser Download)
   function saveLog() {
     try {
       const blob = new Blob([logText], { type: "text/plain" });
@@ -372,13 +354,11 @@
     }
   }
 
-  // Wallet Workflow State
   let showConfirmModal = false;
   let modalTitle = "";
   let modalMessage = "";
   let modalButtons = []; // { label, style, onClick }
 
-  // Blocking Overlay State
   let isProcessing = false;
   let processingMessage = "Processing...";
 
@@ -393,9 +373,6 @@
     showConfirmModal = false;
   }
 
-  // --- REFACTORED WALLET ACTIONS ---
-
-  // Config Help
   let showConfHelp = false;
   function toggleConfHelp() {
     showConfHelp = !showConfHelp;
@@ -703,7 +680,6 @@
           {:else if activeSubTab === "NETWORK"}
             <ToolsNetwork
               {activeSubTab}
-              bind:networkMode
               on:toast={(e) => showToast(e.detail.msg, e.detail.type)}
             />
           {/if}
@@ -1483,4 +1459,3 @@ rpcallowip=127.0.0.1
   @media (max-width: 800px) {
   }
 </style>
-

@@ -39,12 +39,12 @@ export const networkInfo = writable({
  * Tracks financial data for the user.
  */
 export const walletInfo = writable({
-    balance: 0.0,
+    balance: "--",
     unconfirmed: 0.0,
     immature: 0.0,
     transactions: [],
-    newTxCount: 0, // For notifications
-    status: "--" // UNENCRYPTED, LOCKED, UNLOCKED
+    newTxCount: 0,
+    status: "--"
 });
 
 /**
@@ -52,5 +52,5 @@ export const walletInfo = writable({
  * Shared UI concerns like Toast notifications.
  */
 export const uiState = writable({
-    toast: null // { msg, type, id }
+    toast: null
 });
