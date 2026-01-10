@@ -59,6 +59,8 @@ pub fn run() {
       commands::list_network_assets,
       commands::check_ownership_token,
       commands::reissue_asset,
+      commands::lock_asset_supply,
+      commands::update_asset_metadata,
       commands::issue_unique_asset,
 
       // Commands from modules::process

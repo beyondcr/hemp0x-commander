@@ -968,3 +968,41 @@ pub fn backup_wallet_to(path: String) -> Result<(), String> {
   Ok(())
 }
 
+#[tauri::command]
+pub fn lock_asset_supply(name: String, current_units: u8) -> Result<String, String> {
+  ensure_config()?;
+  // To lock: reissue with amount 0, reissuable=false.
+  // We need a destination address (can be same wallet).
+  let to_addr = run_cli(&[String::from("getnewaddress")])?;
+  let change_addr = to_addr.clone();
+
+  // reissue "name" 0 "addr" "change" false units
+  run_cli(&[
+      String::from("reissue"),
+      name,
+      String::from("0"),
+      to_addr,
+      change_addr,
+      String::from("false"), // LOCKED
+      current_units.to_string()
+  ])
+}
+
+#[tauri::command]
+pub fn update_asset_metadata(name: String, ipfs_hash: String, current_units: u8) -> Result<String, String> {
+  ensure_config()?;
+  // To update IPFS: reissue with amount 0, reissuable=true, same units, new IPFS.
+  let to_addr = run_cli(&[String::from("getnewaddress")])?;
+  let change_addr = to_addr.clone();
+
+  run_cli(&[
+      String::from("reissue"),
+      name,
+      String::from("0"),
+      to_addr,
+      change_addr,
+      String::from("true"),
+      current_units.to_string(),
+      ipfs_hash
+  ])
+}

@@ -11,6 +11,7 @@
     import ModalTransfer from "./modals/ModalTransfer.svelte";
     import ModalReissue from "./modals/ModalReissue.svelte";
     import ModalBrowse from "./modals/ModalBrowse.svelte";
+    import ModalAssetGovernance from "./modals/ModalAssetGovernance.svelte";
     import Tooltip from "./ui/Tooltip.svelte";
     import eyeOpen from "../assets/eye-open.png";
     import eyeClosed from "../assets/eye-closed.png";
@@ -37,6 +38,8 @@
     // Sub-Asset & NFT Modals
     let subModalOpen = false;
     let nftModalOpen = false;
+    let govModalOpen = false;
+    let selectedGovAsset = null;
 
     // Browse Modal
     let browseModalOpen = false;
@@ -434,6 +437,19 @@
         nftModalOpen = true; // Open as Modal
     }
 
+    async function openGovernance(asset) {
+        // We need full asset data (units, ipfs, etc) for governance
+        try {
+            const details = await core.invoke("get_asset_data", {
+                name: asset.name,
+            });
+            selectedGovAsset = { ...asset, ...details }; // Merge list info with full details
+            govModalOpen = true;
+        } catch (e) {
+            console.error("Failed to load details for governance", e);
+        }
+    }
+
     function initiateReissue() {
         if (!reissueAsset || !reissueQty) {
             status = "Asset and Qty required.";
@@ -633,7 +649,7 @@
                             {#if asset.hasOwner}
                                 <div
                                     class="owner-badge"
-                                    title="You own this asset (can reissue)"
+                                    title="Asset Ownership"
                                 >
                                     👑
                                 </div>
@@ -656,8 +672,8 @@
                                 <div class="asset-meta">
                                     <span class="asset-type"
                                         >{asset.hasOwner
-                                            ? "👑 OWNER"
-                                            : "🔒 LOCKED"}</span
+                                            ? "OWNER"
+                                            : "LOCKED"}</span
                                     >
                                     <button
                                         class="quick-transfer"
@@ -716,6 +732,7 @@
         }}
         on:createSub={(e) => goToSubAsset(e.detail.name)}
         on:createNft={(e) => goToNft(e.detail.name)}
+        on:gov={(e) => openGovernance(e.detail)}
     />
 
     <!-- ═══════════════ CREATE MODAL (ROOT) ═══════════════ -->
@@ -804,6 +821,12 @@
     <ModalBrowse
         isOpen={browseModalOpen}
         on:close={() => (browseModalOpen = false)}
+    />
+
+    <ModalAssetGovernance
+        isOpen={govModalOpen}
+        asset={selectedGovAsset}
+        on:close={() => (govModalOpen = false)}
     />
 
     <!-- ═══════════════ CONFIRM MODAL ═══════════════ -->

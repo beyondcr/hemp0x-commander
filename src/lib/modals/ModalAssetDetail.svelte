@@ -1,15 +1,20 @@
 <script>
     import { fly, fade } from "svelte/transition";
     import { createEventDispatcher } from "svelte";
-    import { formatBalance } from "../utils.js"; // Adjust import path once moved
+    import { formatBalance } from "../utils.js";
+    import "../../components.css";
+    import Tooltip from "../ui/Tooltip.svelte";
+    import ModalAlert from "./ModalAlert.svelte";
 
     const dispatch = createEventDispatcher();
 
-    export let asset = null;
-    export let metadata = null;
+    export let asset;
+    export let metadata;
     export let loading = false;
     export let slideDirection = 0;
     export let hasMultipleAssets = false;
+
+    let showAlert = false;
 
     function close() {
         dispatch("close");
@@ -38,6 +43,12 @@
 
     function onNft() {
         dispatch("createNft", asset);
+    }
+
+    function onGovernance() {
+        if (asset && asset.hasOwner) {
+            dispatch("gov", asset);
+        }
     }
 </script>
 
@@ -103,6 +114,15 @@
                                 <div
                                     class="stat-value"
                                     class:owner-yes={asset.hasOwner}
+                                    class:clickable={asset.hasOwner}
+                                    role="button"
+                                    tabindex={asset.hasOwner ? 0 : -1}
+                                    title={asset.hasOwner
+                                        ? "Manage Governance"
+                                        : "Status"}
+                                    on:click={onGovernance}
+                                    on:keydown={(e) =>
+                                        e.key === "Enter" && onGovernance()}
                                 >
                                     {asset.hasOwner ? "👑 OWNER" : "🔒 LOCKED"}
                                 </div>
@@ -126,9 +146,20 @@
                             <div class="metadata-section">
                                 <div class="meta-row">
                                     <span class="meta-label">TOTAL SUPPLY</span>
-                                    <span class="meta-value"
-                                        >{metadata.amount.toLocaleString()}</span
+                                    <Tooltip
+                                        text="Top 100 Holders (Coming Soon)"
                                     >
+                                        <span
+                                            class="meta-value clickable"
+                                            role="button"
+                                            tabindex="0"
+                                            on:click={() => (showAlert = true)}
+                                            on:keydown={(e) =>
+                                                e.key === "Enter" &&
+                                                (showAlert = true)}
+                                            >{metadata.amount.toLocaleString()}</span
+                                        >
+                                    </Tooltip>
                                 </div>
                                 <div class="meta-row">
                                     <span class="meta-label">REISSUABLE</span>
@@ -165,7 +196,15 @@
                             >
                                 <span class="action-icon">→</span> TRANSFER
                             </button>
-                            <button class="action-btn" on:click={onReissue}>
+                            <button
+                                class="action-btn"
+                                class:disabled={!metadata?.reissuable}
+                                on:click={onReissue}
+                                disabled={!metadata?.reissuable}
+                                title={!metadata?.reissuable
+                                    ? "Asset supply is locked"
+                                    : "Reissue Asset"}
+                            >
                                 <span class="action-icon">↻</span> REISSUE
                             </button>
                         </div>
@@ -199,6 +238,14 @@
             {/if}
         </div>
     </div>
+
+    <!-- Alert Modal for Coming Soon features -->
+    <ModalAlert
+        isOpen={showAlert}
+        title="Coming Soon"
+        message="Top 100 Holders list requires 'assetindex=1' node configuration. This feature is deferred."
+        on:close={() => (showAlert = false)}
+    />
 {/if}
 
 <style>
@@ -318,9 +365,28 @@
         color: var(--color-primary);
         text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
     }
-    .owner-yes {
-        color: #ffd700 !important;
-        text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+    .action-btn.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        filter: grayscale(1);
+    }
+    .action-btn.disabled:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+        transform: none;
+        box-shadow: none;
+    }
+    .stat-value.clickable {
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 0 4px;
+    }
+    .stat-value.clickable:hover {
+        background: rgba(255, 215, 0, 0.15);
+        border-color: rgba(255, 215, 0, 0.3);
+        transform: scale(1.05);
     }
 
     /* Actions */
