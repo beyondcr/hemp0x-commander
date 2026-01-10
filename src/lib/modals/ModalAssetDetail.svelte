@@ -47,7 +47,12 @@
 
     function onGovernance() {
         if (asset && asset.hasOwner) {
-            dispatch("gov", asset);
+            // Pass reissuable status if available
+            const govAsset = {
+                ...asset,
+                reissuable: metadata?.reissuable ?? true, // Default to true if unknown
+            };
+            dispatch("gov", govAsset);
         }
     }
 </script>

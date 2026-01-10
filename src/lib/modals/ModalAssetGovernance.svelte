@@ -28,6 +28,29 @@
     let alertType = "info";
     let shouldCloseOnAlertDismiss = false;
 
+    // Indexing State
+    let assetIndexEnabled = false; // We will check this on mount
+
+    async function checkAssetIndex() {
+        // TODO: Implement backend command to check hemp.conf
+        // For now, assume false to show the button
+        // const info = await invoke("get_info");
+        // assetIndexEnabled = info.assetindex;
+    }
+
+    async function enableAssetIndex() {
+        // TODO: invoke("enable_asset_index")
+        triggerAlert(
+            "Coming Soon",
+            "We need to add the backend logic to modify hemp.conf and restart the node. But the UI is ready!",
+            "info",
+        );
+    }
+
+    $: if (activeTab === "dividends") {
+        checkAssetIndex();
+    }
+
     function startHold() {
         if (!lockConfirmed || isSubmitting) return;
         isHolding = true;
@@ -37,7 +60,11 @@
             lockHoldSeconds--;
             if (lockHoldSeconds <= 0) {
                 stopHold();
-                handleLock();
+                if (activeTab === "lock") {
+                    handleLock();
+                } else if (activeTab === "transfer") {
+                    handleTransferLogic();
+                }
             }
         }, 1000);
     }
@@ -52,6 +79,12 @@
         newIpfsHash = asset?.ipfs_hash || "";
         lockConfirmed = false;
         isSubmitting = false;
+        stopHold();
+    }
+
+    $: if (activeTab) {
+        lockConfirmed = false;
+        stopHold();
     }
 
     function close() {
@@ -73,8 +106,8 @@
         }
     }
 
-    async function handleTransfer() {
-        if (!newOwnerAddress) return;
+    // Called by timer when 10s is up
+    async function handleTransferLogic() {
         isSubmitting = true;
         try {
             const ownerToken = (asset?.name || "") + "!";
@@ -94,6 +127,11 @@
         } finally {
             isSubmitting = false;
         }
+    }
+
+    // Dummy handler if needed for button, but button uses mousedown=startHold
+    function handleTransfer() {
+        // Validation check usually done in template disabled state
     }
 
     async function handleLock() {
@@ -172,6 +210,10 @@
                     >Transfer Owner</button
                 >
                 <button
+                    class:active={activeTab === "dividends"}
+                    on:click={() => (activeTab = "dividends")}>Dividends</button
+                >
+                <button
                     class:active={activeTab === "metadata"}
                     on:click={() => (activeTab = "metadata")}>Metadata</button
                 >
@@ -186,14 +228,17 @@
                 <!-- Inline alerts removed in favor of ModalAlert -->
 
                 {#if activeTab === "transfer"}
-                    <div class="panel">
-                        <!-- ... content ... -->
+                    <div class="panel danger-zone">
+                        <h4>Transfer Ownership</h4>
                         <p class="section-desc">
                             Send the <strong
                                 >Administrator Token ({asset
                                     ? asset.name
                                     : ""}!)</strong
-                            > to another wallet. You will lose all control.
+                            > to another wallet.
+                        </p>
+                        <p class="warning-text">
+                            You will lose all control of this asset forever.
                         </p>
                         <label for="owner-address">New Owner Address</label>
                         <input
@@ -203,17 +248,85 @@
                             placeholder="H..."
                             class="cyber-input"
                         />
+
+                        <!-- Confirmation Check for Transfer -->
+                        <label class="confirm-check">
+                            <input
+                                type="checkbox"
+                                bind:checked={lockConfirmed}
+                            />
+                            <span>I confirm I want to transfer ownership.</span>
+                        </label>
+
                         <div class="actions">
                             <button
-                                class="cyber-btn"
-                                on:click={handleTransfer}
-                                disabled={isSubmitting || !newOwnerAddress}
+                                class="cyber-btn danger"
+                                on:mousedown={startHold}
+                                on:touchstart={startHold}
+                                on:mouseup={stopHold}
+                                on:touchend={stopHold}
+                                on:mouseleave={stopHold}
+                                disabled={!lockConfirmed ||
+                                    isSubmitting ||
+                                    !newOwnerAddress}
+                                style={isHolding
+                                    ? "transform: scale(0.98); opacity: 0.9;"
+                                    : ""}
                             >
-                                {isSubmitting
-                                    ? "Transferring..."
-                                    : "Transfer Ownership"}
+                                {#if isSubmitting}
+                                    TRANSFERRING...
+                                {:else if isHolding}
+                                    HOLD TO TRANSFER ({lockHoldSeconds}s)...
+                                {:else}
+                                    HOLD 10s TO TRANSFER OWNDERSHIP
+                                {/if}
                             </button>
                         </div>
+                    </div>
+                {:else if activeTab === "dividends"}
+                    <div class="panel">
+                        <p class="section-desc">
+                            Distribute dividends to all holders of <strong
+                                >{asset ? asset.name : ""}</strong
+                            >.
+                        </p>
+
+                        {#if assetIndexEnabled}
+                            <div class="coming-soon">
+                                <p>Feature Coming Soon</p>
+                                <small
+                                    >Snapshot and Payout logic requires backend
+                                    update.</small
+                                >
+                            </div>
+                        {:else}
+                            <div
+                                class="panel danger-zone"
+                                style="border-color: var(--color-primary); background: rgba(0,255,65,0.05);"
+                            >
+                                <h4>Indexing Required</h4>
+                                <p>
+                                    To payout dividends, your node must track
+                                    all asset holders. This requires <code
+                                        >assetindex=1</code
+                                    >
+                                    which is currently <strong>OFF</strong>.
+                                </p>
+                                <p class="warning-text" style="color: #aaa;">
+                                    Enabling this will restart your node and
+                                    take several hours to reindex the
+                                    blockchain.
+                                </p>
+                                <div class="actions">
+                                    <button
+                                        class="cyber-btn"
+                                        on:click={enableAssetIndex}
+                                    >
+                                        ENABLE INDEX & RESTART
+                                    </button>
+                                </div>
+                            </div>
+                        {/if}
                     </div>
                 {:else if activeTab === "metadata"}
                     <div class="panel">
@@ -244,45 +357,66 @@
                     <div class="panel danger-zone">
                         <div class="warning-icon">⚠️</div>
                         <h4>Danger Zone</h4>
-                        <p>
-                            This will <strong>PERMANENTLY LOCK</strong> the
-                            supply of {asset ? asset.name : ""}.
-                        </p>
-                        <p>
-                            No more tokens can ever be minted. This action
-                            cannot be undone.
-                        </p>
 
-                        <label class="confirm-check">
-                            <input
-                                type="checkbox"
-                                bind:checked={lockConfirmed}
-                            />
-                            <span>I understand this is permanent.</span>
-                        </label>
+                        {#if asset?.reissuable === false}
+                            <p class="locked-msg">
+                                This asset is <strong>ALREADY LOCKED</strong>.
+                            </p>
+                            <p>
+                                The supply cannot be changed. This action is
+                                permanent and has already been taken.
+                            </p>
 
-                        <div class="actions">
-                            <button
-                                class="cyber-btn danger"
-                                on:mousedown={startHold}
-                                on:touchstart={startHold}
-                                on:mouseup={stopHold}
-                                on:touchend={stopHold}
-                                on:mouseleave={stopHold}
-                                disabled={!lockConfirmed || isSubmitting}
-                                style={isHolding
-                                    ? "transform: scale(0.98); opacity: 0.9;"
-                                    : ""}
-                            >
-                                {#if isSubmitting}
-                                    LOCKING...
-                                {:else if isHolding}
-                                    HOLD TO LOCK ({lockHoldSeconds}s)...
-                                {:else}
-                                    HOLD 10s TO LOCK FOREVER
-                                {/if}
-                            </button>
-                        </div>
+                            <div class="actions">
+                                <button
+                                    class="cyber-btn danger"
+                                    disabled
+                                    style="opacity: 0.5; cursor: not-allowed;"
+                                >
+                                    SUPPLY LOCKED FOREVER
+                                </button>
+                            </div>
+                        {:else}
+                            <p>
+                                This will <strong>PERMANENTLY LOCK</strong> the
+                                supply of {asset ? asset.name : ""}.
+                            </p>
+                            <p>
+                                No more tokens can ever be minted. This action
+                                cannot be undone.
+                            </p>
+
+                            <label class="confirm-check">
+                                <input
+                                    type="checkbox"
+                                    bind:checked={lockConfirmed}
+                                />
+                                <span>I understand this is permanent.</span>
+                            </label>
+
+                            <div class="actions">
+                                <button
+                                    class="cyber-btn danger"
+                                    on:mousedown={startHold}
+                                    on:touchstart={startHold}
+                                    on:mouseup={stopHold}
+                                    on:touchend={stopHold}
+                                    on:mouseleave={stopHold}
+                                    disabled={!lockConfirmed || isSubmitting}
+                                    style={isHolding
+                                        ? "transform: scale(0.98); opacity: 0.9;"
+                                        : ""}
+                                >
+                                    {#if isSubmitting}
+                                        LOCKING...
+                                    {:else if isHolding}
+                                        HOLD TO LOCK ({lockHoldSeconds}s)...
+                                    {:else}
+                                        HOLD 10s TO LOCK FOREVER
+                                    {/if}
+                                </button>
+                            </div>
+                        {/if}
                     </div>
                 {/if}
             </div>
@@ -311,8 +445,8 @@
         backdrop-filter: blur(5px);
     }
     .modal {
-        width: 460px; /* Slightly narrower */
-        max-width: 90vw;
+        width: 600px; /* Widened to fit all tabs on one line */
+        max-width: 95vw;
         border: 1px solid rgba(0, 255, 65, 0.2);
         box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
         border-radius: 16px;
@@ -385,6 +519,12 @@
         margin: 0.2rem 0; /* Tighter */
         font-size: 1rem;
     }
+    .locked-msg {
+        color: #ffaaaa;
+        font-weight: bold;
+        text-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+        margin-bottom: 0.5rem;
+    }
     .danger-zone p {
         color: #ddd;
         font-size: 0.85rem;
@@ -413,5 +553,17 @@
         cursor: pointer;
         color: #ffaaaa;
         font-size: 0.85rem;
+    }
+    .warning-text {
+        color: #ffaaaa;
+        font-size: 0.8rem;
+        margin-bottom: 0.5rem;
+    }
+    .coming-soon {
+        text-align: center;
+        padding: 2rem;
+        border: 1px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        color: #aaa;
     }
 </style>

@@ -33,6 +33,7 @@ All notable changes to Hemp0x Commander are documented here.
     - **Hold-to-Lock** - "Lock Supply" requires a 10-second hold with visual countdown to prevent accidental locking
     - **Smart Reissue** - "Reissue" button is disabled (greyed out) for locked assets
     - **Styled Alerts** - Critical actions (Transfer, Lock) now use persistent, styled alerts instead of browser popups
+    - **Future-Ready UI** - Added UI placeholders for upcoming Governance & Dividend features
 
 ### Wallet & Encryption
 - Streamlined new wallet creation with proper node stop/start

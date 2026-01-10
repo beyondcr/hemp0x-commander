@@ -89,6 +89,13 @@
         }
     }
 
+    // Auto-refresh when wallet balance/tx updates
+    import { walletInfo } from "../stores.js";
+    $: if ($walletInfo && isNodeOnline) {
+        // Trigger refresh if balance changes or new tx comes in
+        refreshList();
+    }
+
     // --- SORTING ---
     let sortColumn = "label"; // 'label', 'address', 'balance'
     let sortDirection = "asc"; // 'asc', 'desc'
