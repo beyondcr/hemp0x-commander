@@ -60,9 +60,11 @@ export APPIMAGE_EXTRACT_AND_RUN=1 # Bypass FUSE
 cd /app
 
 # B. Build Application
-echo "--> Building Tauri Application..."
-npm install
-npm run tauri build
+echo "--> Starting npm install..."
+npm install || { echo "npm install failed"; exit 1; }
+echo "--> npm install complete. Starting tauri build..."
+npm run tauri build || { echo "tauri build failed"; exit 1; }
+echo "--> tauri build complete."
 
 # C. Define APPDIR
 APPDIR="/app/src-tauri/target/release/bundle/appimage/build_appdir"
