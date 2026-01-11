@@ -2,7 +2,7 @@
 set -e
 
 # CONSTANTS
-ENGINE="docker"
+ENGINE="podman"
 APP_NAME="Hemp0x_Commander"
 VERSION="1.3.0"
 # Default path for Legacy Runtime (user can override or place in root)
