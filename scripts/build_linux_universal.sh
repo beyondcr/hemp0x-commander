@@ -75,13 +75,13 @@ echo "--> Starting tauri build (verbose)..."
 echo "--> tauri build complete."
 
 # C. Define APPDIR (Dynamic detection for Tauri v2 naming)
-APPDIR=$(find /app/src-tauri/target/release/bundle/appimage -maxdepth 1 -name "*.AppDir" | head -n 1)
-if [ -z "$APPDIR" ]; then
+APPDIR=\$(find /app/src-tauri/target/release/bundle/appimage -maxdepth 1 -name "*.AppDir" | head -n 1)
+if [ -z "\$APPDIR" ]; then
     echo "Error: Could not find AppDir in /app/src-tauri/target/release/bundle/appimage/"
     ls -F /app/src-tauri/target/release/bundle/appimage/
     exit 1
 fi
-echo "APPDIR is found at: '$APPDIR'"
+echo "APPDIR is found at: '\$APPDIR'"
 
 # A. Install Dependencies (Rust/Node) - Handled by Image mostly, but ensure setup
 source \$HOME/.cargo/env || true
