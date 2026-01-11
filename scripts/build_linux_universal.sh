@@ -67,7 +67,7 @@ ls -l node_modules/.bin/tauri
 echo "--> Running tauri info..."
 ./node_modules/.bin/tauri info || echo "tauri info failed"
 echo "--> Starting tauri build (verbose)..."
-./node_modules/.bin/tauri build --verbose > tauri_build_out.log 2>&1 || { 
+./node_modules/.bin/tauri build > tauri_build_out.log 2>&1 || { 
     echo "tauri build failed! Dumping log:"
     tail -n 100 tauri_build_out.log
     exit 1
