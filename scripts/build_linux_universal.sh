@@ -64,7 +64,7 @@ echo "--> Starting npm install..."
 npm install || { echo "npm install failed"; exit 1; }
 
 echo "--> Updating Rust dependencies (fix version mismatch)..."
-cargo update
+cargo update --manifest-path src-tauri/Cargo.toml
 
 echo "--> npm install complete. Checking tauri binary..."
 ls -l node_modules/.bin/tauri
