@@ -109,7 +109,7 @@ EOF
 
 chmod +x scripts/internal_build.sh
 # Run container
-$ENGINE run --rm -v "$PROJECT_DIR:/app" -w /app "$DOCKER_IMAGE_NAME" /bin/bash /app/scripts/internal_build.sh
+$ENGINE run --rm -v "$PROJECT_DIR:/app:Z" -w /app "$DOCKER_IMAGE_NAME" /bin/bash /app/scripts/internal_build.sh
 
 echo "[3/5] Extracting & Patching with Legacy V1.2 Runtime..."
 # 4. EXTRACT & REPACK (LEGACY RUNTIME)
