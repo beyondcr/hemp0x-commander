@@ -62,7 +62,11 @@ cd /app
 # B. Build Application
 echo "--> Starting npm install..."
 npm install || { echo "npm install failed"; exit 1; }
-echo "--> npm install complete. Starting tauri build..."
+echo "--> npm install complete. Checking tauri binary..."
+ls -l node_modules/.bin/tauri
+echo "--> Running tauri info..."
+./node_modules/.bin/tauri info || echo "tauri info failed"
+echo "--> Starting tauri build..."
 npm run tauri build || { echo "tauri build failed"; exit 1; }
 echo "--> tauri build complete."
 
