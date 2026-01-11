@@ -62,6 +62,10 @@ cd /app
 # B. Build Application
 echo "--> Starting npm install..."
 npm install || { echo "npm install failed"; exit 1; }
+
+echo "--> Updating Rust dependencies (fix version mismatch)..."
+cargo update
+
 echo "--> npm install complete. Checking tauri binary..."
 ls -l node_modules/.bin/tauri
 echo "--> Running tauri info..."
