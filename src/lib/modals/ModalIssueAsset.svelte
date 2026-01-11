@@ -62,7 +62,7 @@
                     <div class="static-value">0.25 HEMP</div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group wide">
                     <label for="root-qty">QUANTITY</label>
                     <input
                         id="root-qty"
@@ -73,7 +73,7 @@
                     />
                 </div>
 
-                <div class="form-group">
+                <div class="form-group narrow">
                     <label for="root-units">DECIMALS</label>
                     <input
                         id="root-units"

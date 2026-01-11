@@ -73,7 +73,12 @@
                     // items is Vec<AssetItem> { name, balance, asset_type }
                     assetList = items;
                     // assets for dropdown (names only)
-                    assets = ["HEMP", ...items.map((item) => item.name)];
+                    assets = [
+                        "HEMP",
+                        ...items
+                            .filter((i) => !i.name.endsWith("!"))
+                            .map((item) => item.name),
+                    ];
                 })
                 .catch(() => {
                     assets = ["HEMP"];
