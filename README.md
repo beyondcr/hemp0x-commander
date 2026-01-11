@@ -59,7 +59,7 @@
 <br/><br/>
 
 ### Asset Management
-<img src="screenshots/assets.png" width="100%" alt="Asset Creation" />
+<img src="screenshots/assets.png?v=1.3" width="100%" alt="Asset Creation" />
 <br/><br/>
 
 ### Tools & System
