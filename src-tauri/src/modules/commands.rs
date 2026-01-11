@@ -133,7 +133,7 @@ pub fn dashboard_data() -> Result<DashboardData, String> {
   {
     // pgrep behavior
     let output = Command::new("pgrep")
-        .arg("-x")
+        .arg("-f")
         .arg("hemp0xd")
         .output();
     

@@ -10,10 +10,17 @@ pub fn bin_name(name: &str) -> String {
 }
 
 pub fn add_bin_candidates(candidates: &mut Vec<PathBuf>, base: PathBuf, name: &str, depth: usize) {
+  let target_triple = "x86_64-unknown-linux-gnu"; // Hardcoded for this specific linux context, or use cfg! logic ideally
+  let suffixed_name = format!("{}-{}", name, target_triple);
+  
   let mut current = Some(base);
   for _ in 0..=depth {
     if let Some(path) = current {
       candidates.push(path.join(bin_name(name)));
+      // Also check for Tauri sidecar style
+      if cfg!(unix) {
+         candidates.push(path.join(&suffixed_name));
+      }
       current = path.parent().map(|p| p.to_path_buf());
     } else {
       break;
@@ -22,8 +29,21 @@ pub fn add_bin_candidates(candidates: &mut Vec<PathBuf>, base: PathBuf, name: &s
 }
 
 pub fn resolve_bin(name: &str) -> String {
+  let target_triple = "x86_64-unknown-linux-gnu";
+  let suffixed_name = format!("{}-{}", name, target_triple);
+
   if let Ok(exe) = std::env::current_exe() {
     if let Some(dir) = exe.parent() {
+      if cfg!(unix) {
+        let candidate = dir.join(&suffixed_name);
+        if candidate.exists() {
+          return candidate.to_string_lossy().to_string();
+        }
+        let resources = dir.join("resources").join(&suffixed_name);
+        if resources.exists() {
+          return resources.to_string_lossy().to_string();
+        }
+      }
       let candidate = dir.join(bin_name(name));
       if candidate.exists() {
          return candidate.to_string_lossy().to_string();

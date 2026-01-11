@@ -76,6 +76,7 @@ pub fn run() {
       files::read_config,
       files::write_config,
       files::read_log,
+      files::truncate_log,
       files::open_data_dir,
       files::backup_data_folder,
       files::backup_data_folder_to,

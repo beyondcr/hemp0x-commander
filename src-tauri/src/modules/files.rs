@@ -270,6 +270,16 @@ pub fn read_log(lines: Option<u32>) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn truncate_log() -> Result<(), String> {
+  let dir = data_dir()?;
+  let log_path = dir.join("debug.log");
+  if log_path.exists() {
+    fs::write(&log_path, "").map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+#[tauri::command]
 pub fn backup_data_folder() -> Result<String, String> {
   let dir = data_dir()?;
   if !dir.exists() {

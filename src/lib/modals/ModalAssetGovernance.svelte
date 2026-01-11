@@ -291,42 +291,13 @@
                             >.
                         </p>
 
-                        {#if assetIndexEnabled}
-                            <div class="coming-soon">
-                                <p>Feature Coming Soon</p>
-                                <small
-                                    >Snapshot and Payout logic requires backend
-                                    update.</small
-                                >
-                            </div>
-                        {:else}
-                            <div
-                                class="panel danger-zone"
-                                style="border-color: var(--color-primary); background: rgba(0,255,65,0.05);"
+                        <div class="coming-soon">
+                            <p>Feature Coming Soon</p>
+                            <small
+                                >Snapshot and Payout logic requires backend
+                                update.</small
                             >
-                                <h4>Indexing Required</h4>
-                                <p>
-                                    To payout dividends, your node must track
-                                    all asset holders. This requires <code
-                                        >assetindex=1</code
-                                    >
-                                    which is currently <strong>OFF</strong>.
-                                </p>
-                                <p class="warning-text" style="color: #aaa;">
-                                    Enabling this will restart your node and
-                                    take several hours to reindex the
-                                    blockchain.
-                                </p>
-                                <div class="actions">
-                                    <button
-                                        class="cyber-btn"
-                                        on:click={enableAssetIndex}
-                                    >
-                                        ENABLE INDEX & RESTART
-                                    </button>
-                                </div>
-                            </div>
-                        {/if}
+                        </div>
                     </div>
                 {:else if activeTab === "metadata"}
                     <div class="panel">

@@ -26,40 +26,140 @@
 
     $: cmdPlaceholder = shellMode ? "type a shell command" : "command args";
 
-    const commands = [
-        "getinfo",
-        "help",
-        "setaccount",
-        "getblockchaininfo",
-        "getnetworkinfo",
-        "getwalletinfo",
-        "getpeerinfo",
-        "getmininginfo",
-        "getmempoolinfo",
-        "listassets",
-        "listmyassets",
-        "listbanned",
-        "listtransactions",
-        "listunspent",
-        "listaddressgroupings",
-        "listreceivedbyaddress",
-        "validateaddress",
-        "getnewaddress",
-        "sendtoaddress",
-        "stop",
-        "backupwallet",
-        "encryptwallet",
-        "walletpassphrase",
-        "walletlock",
-        "getdifficulty",
-        "getnetworkhashps",
-        "uptime",
-        "verifymessage",
-        "signmessage",
-        "issue",
-        "transfer",
-        "reissue",
-    ];
+    // Commands grouped for better UX
+    const commandGroups = {
+        "Wallet & Payments": [
+            "getbalance",
+            "getunconfirmedbalance",
+            "getwalletinfo",
+            "listtransactions",
+            "listunspent",
+            "listlockunspent",
+            "lockunspent",
+            "listaccounts",
+            "listwallets",
+            "listaddressgroupings",
+            "listreceivedbyaccount",
+            "listreceivedbyaddress",
+            "getnewaddress",
+            "getaccountaddress",
+            "getaccount",
+            "setaccount",
+            "getreceivedbyaccount",
+            "getreceivedbyaddress",
+            "getaddressesbyaccount",
+            "sendtoaddress",
+            "sendfrom",
+            "sendmany",
+            "settxfee",
+            "validateaddress",
+            "signmessage",
+            "verifymessage",
+            "backupwallet",
+            "encryptwallet",
+            "walletpassphrase",
+            "walletlock",
+            "dumpwallet",
+            "importwallet",
+        ],
+        Assets: [
+            "listassets",
+            "listmyassets",
+            "getassetdata",
+            "issue",
+            "issueunique",
+            "issuerestrictedasset",
+            "issuequalifierasset",
+            "reissue",
+            "reissuerestrictedasset",
+            "transfer",
+            "transferfromaddress",
+            "transferfromaddresses",
+            "transferqualifier",
+            "listaddressrestrictions",
+            "listglobalrestrictions",
+            "checkaddressrestriction",
+            "checkglobalrestriction",
+            "freezeaddress",
+            "unfreezeaddress",
+            "freezerestrictedasset",
+            "unfreezerestrictedasset",
+            "viewmyrestrictedaddresses",
+            "viewmytaggedaddresses",
+            "addtagtoaddress",
+            "removetagfromaddress",
+            "listtagsforaddress",
+            "distributereward",
+            "getdistributestatus",
+        ],
+        "Mining & Chain": [
+            "getblockcount",
+            "getbestblockhash",
+            "getdifficulty",
+            "getnetworkhashps",
+            "getmininginfo",
+            "getblock",
+            "getblockhash",
+            "getblockheader",
+            "getchaintips",
+            "getblockchaininfo",
+            "getmempoolinfo",
+            "getrawmempool",
+            "gettxoutsetinfo",
+            "generate",
+            "generatetoaddress",
+            "getgenerate",
+            "setgenerate",
+            "submitblock",
+        ],
+        Network: [
+            "getinfo",
+            "getpeerinfo",
+            "getconnectioncount",
+            "getnettotals",
+            "getnetworkinfo",
+            "ping",
+            "addnode",
+            "disconnectnode",
+            "setban",
+            "listbanned",
+            "clearbanned",
+            "setnetworkactive",
+        ],
+        "Advanced / Raw": [
+            "createrawtransaction",
+            "decoderawtransaction",
+            "signrawtransaction",
+            "sendrawtransaction",
+            "getrawtransaction",
+            "fundrawtransaction",
+            "combinerawtransaction",
+            "dumpprivkey",
+            "importprivkey",
+            "importaddress",
+            "importpubkey",
+            "importmulti",
+            "importprunedfunds",
+            "removeprunedfunds",
+            "addmultisigaddress",
+            "createmultisig",
+            "signmessagewithprivkey",
+        ],
+        "System & Debug": [
+            "help",
+            "stop",
+            "uptime",
+            "getmemoryinfo",
+            "getrpcinfo",
+            "getcacheinfo",
+            "checkaddresstag",
+            "isvalidverifierstring",
+            "getverifierstring",
+        ],
+    };
+
+    // Flatten for autocomplete
+    const commands = Object.values(commandGroups).flat().sort();
 
     function showToast(msg, type = "info") {
         dispatch("toast", { msg, type });
@@ -77,6 +177,7 @@
     async function runCommand() {
         // if (!isNodeOnline && !shellMode) {
         //   showToast("Node is offline", "error");
+        // }
 
         try {
             const line = cmdLine.trim();
@@ -233,9 +334,13 @@
                     class="input-glass"
                     disabled={shellMode}
                 >
-                    <option value="">Select command</option>
-                    {#each commands as cmd}
-                        <option value={cmd}>{cmd}</option>
+                    <option value="">Select command...</option>
+                    {#each Object.entries(commandGroups) as [groupName, groupCmds]}
+                        <optgroup label={groupName}>
+                            {#each groupCmds as cmd}
+                                <option value={cmd}>{cmd}</option>
+                            {/each}
+                        </optgroup>
                     {/each}
                 </select>
             </div>
@@ -351,9 +456,9 @@
     /* Input styles presumed global or needing import - keeping minimal here */
     .input-glass {
         width: 100%;
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        color: #fff;
+        background: #111; /* Force solid dark background (fixes Linux transparency issues) */
+        border: 1px solid rgba(0, 255, 65, 0.3);
+        color: #00ff41; /* Matrix green text */
         padding: 0.6rem;
         border-radius: 4px;
         font-family: inherit;
@@ -361,5 +466,22 @@
     .input-glass:focus {
         border-color: var(--color-primary);
         outline: none;
+    }
+
+    /* LINUX FIX: Deep OS Override */
+    select.input-glass {
+        appearance: none; /* Remove native OS styling */
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-color: #111 !important;
+        background-image: none;
+        color: #00ff41 !important;
+        cursor: pointer;
+    }
+
+    select.input-glass option {
+        background-color: #111;
+        color: #00ff41;
+        padding: 10px;
     }
 </style>

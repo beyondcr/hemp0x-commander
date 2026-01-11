@@ -4,6 +4,7 @@
     import { core } from "@tauri-apps/api";
     import { emit } from "@tauri-apps/api/event";
     import { nodeStatus, systemStatus, networkInfo } from "../../stores.js"; // Import Stores
+    import ModalConfirm from "../modals/ModalConfirm.svelte";
 
     $: tauriReady = $systemStatus.tauriReady;
     $: isNodeOnline = $nodeStatus.online;
@@ -25,6 +26,10 @@
     let banListRefreshTimer;
     let autoBanIntervalId = null;
     const autoBanInterval = 120000; // 2 minutes
+
+    // Unban Modal State
+    let showUnbanModal = false;
+    let unbanTarget = "";
 
     async function loadBanList() {
         if (!tauriReady || !isNodeOnline) return; // Prevent offline error
@@ -58,15 +63,21 @@
         banningInProgress = false;
     }
 
-    async function unbanPeer(address) {
-        if (!confirm(`Unban ${address}?`)) return;
+    function initiateUnban(address) {
+        unbanTarget = address;
+        showUnbanModal = true;
+    }
+
+    async function processUnban() {
+        showUnbanModal = false;
         try {
-            await core.invoke("unban_peer", { address });
-            showToast(`Unbanned ${address}`, "success");
+            await core.invoke("unban_peer", { address: unbanTarget });
+            showToast(`Unbanned ${unbanTarget}`, "success");
             loadBanList();
         } catch (e) {
             showToast("Unban failed", "error");
         }
+        unbanTarget = "";
     }
 
     function startAutoBanCheck() {
@@ -134,7 +145,6 @@
     }
 
     // --- NETWORK MODE ---
-    let networkMode;
     let pendingNetworkMode = "";
     let showNetworkModal = false;
 
@@ -293,7 +303,7 @@
                             </div>
                             <button
                                 class="cyber-btn small ghost"
-                                on:click={() => unbanPeer(ban.address)}
+                                on:click={() => initiateUnban(ban.address)}
                                 style="font-size: 0.6rem; padding: 0.2rem 0.5rem; height: auto;"
                                 >UNBAN</button
                             >
@@ -446,6 +456,15 @@
         </div>
     </div>
 {/if}
+
+<!-- UNBAN CONFIRM MODAL -->
+<ModalConfirm
+    isOpen={showUnbanModal}
+    type="UNBAN PEER"
+    payload={{ UnbanTarget: unbanTarget }}
+    on:close={() => (showUnbanModal = false)}
+    on:confirm={processUnban}
+/>
 
 {#if showNetworkModal}
     <div

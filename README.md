@@ -14,14 +14,14 @@
   <br />
 
   [![Website](https://img.shields.io/badge/WEBSITE-hemp0x.com-000000?style=for-the-badge&logo=globe&logoColor=00ff00&labelColor=000000)](https://hemp0x.com)
-  [![Download](https://img.shields.io/badge/DOWNLOAD-v1.2-000000?style=for-the-badge&logo=windows&logoColor=00ff00&labelColor=000000)](https://github.com/beyondcr/hemp0x-commander/releases)
+  [![Download](https://img.shields.io/badge/DOWNLOAD-v1.3.0-000000?style=for-the-badge&logo=windows&logoColor=00ff00&labelColor=000000)](https://github.com/beyondcr/hemp0x-commander/releases)
   [![Discord](https://img.shields.io/badge/DISCORD-JOIN_US-000000?style=for-the-badge&logo=discord&logoColor=00ff00&labelColor=000000)](https://discord.gg/FMEKJUwcsu)
   [![Build Guides](https://img.shields.io/badge/DOCS-BUILD_GUIDES-000000?style=for-the-badge&logo=rust&logoColor=00ff00&labelColor=000000)](docs/BUILDING.md)
 </div>
 
 <br />
 
-![Dashboard Preview](docs/images/dashboard.png)
+![Dashboard Preview](screenshots/dashboard.png)
 
 ---
 
@@ -31,7 +31,7 @@
 
 > [!WARNING]
 > ### ⚠️ STATE: ACTIVE DEVELOPMENT
-> **This software is currently in Beta (v1.2). While functional, it is evolving.**
+> **This software is currently in Beta (v1.3). While functional, it is evolving.**
 >
 > *   🐛 **Expect bugs.**
 > *   🎨 **Expect UI changes.**
@@ -50,13 +50,27 @@
 
 ---
 
-## 📸 Screenshots
+## 📸 Gallery
 
 <div align="center">
 
-| System Status | About & Credits |
-|:---:|:---:|
-| <img src="docs/images/system.png" width="100%" /> | <img src="docs/images/about.png" width="100%" /> |
+### Dashboard
+<img src="screenshots/dashboard.png" width="100%" alt="Dashboard" />
+<br/><br/>
+
+### Asset Management
+<img src="screenshots/assets.png" width="100%" alt="Asset Creation" />
+<br/><br/>
+
+### Tools & System
+<div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+  <img src="screenshots/network.png" width="48%" alt="Network Tools" />
+  <img src="screenshots/system.png" width="48%" alt="System Status" />
+</div>
+<br/>
+
+### About
+<img src="screenshots/about.png" width="100%" alt="About" />
 
 </div>
 
@@ -68,8 +82,8 @@
 
 ### Windows
 1.  Navigate to the **[Releases Page](https://github.com/beyondcr/hemp0x-commander/releases)**.
-2.  Download the **Installer** (`.exe`) or the **Portable Version** (`.zip`).
-3.  Launch `Hemp0x Commander.exe`.
+2.  Download the **Portable Version** (`.zip`).
+3.  Extract and launch `Hemp0x Commander.exe`.
 
 ### Linux
 1.  Download the **AppImage** from **[Releases](https://github.com/beyondcr/hemp0x-commander/releases)**.
@@ -83,12 +97,11 @@
 This application is merely a **Visual Shell** interacting with the core `hemp0xd` binaries. If the shell breaks, your coins are safe in the daemon.
 
 **Found a glitch? Want a feature?**
-Don't keep it to yourself.
+We value your feedback.
 *   **Report it** on the [Hemp0x Discord](https://discord.gg/FMEKJUwcsu).
 *   **Fix it** and submit a PR.
-*   **Break it** and tell us how you did it.
 
-*We build together.*
+*Together we build the future of Hemp0x.*
 
 ---
 

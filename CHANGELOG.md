@@ -2,7 +2,7 @@
 
 All notable changes to Hemp0x Commander are documented here.
 
-## [1.3.0] (WIP) - 2026-01-08
+## [1.3.0] - 2026-01-10
 
 ### Added
 - Sort and Hide assets function added

@@ -332,9 +332,14 @@
       if (!silent) showToast("Failed to read logs", "error");
     }
   }
-  function clearLog() {
-    logText = "";
-    showToast("Log View Cleared", "info");
+  async function clearLog() {
+    try {
+      await core.invoke("truncate_log");
+      logText = "";
+      showToast("Log File Deleted", "success");
+    } catch (e) {
+      showToast(`Failed: ${e}`, "error");
+    }
   }
 
   function saveLog() {
@@ -398,7 +403,7 @@
     <!-- HEADER / TABS -->
     <header class="panel-header no-border">
       <div class="sub-tabs">
-        {#each ["CONSOLE", "WALLET", "CONFIG", "DATA", "SYSTEM", "NETWORK"] as tab}
+        {#each ["CONSOLE", "WALLET", "CONFIG", "DATA", "SYSTEM", "NETWORK", "LOGS"] as tab}
           <button
             class="sub-tab-btn"
             class:active={activeSubTab === tab}
@@ -480,7 +485,7 @@
               </div>
               <div class="action-bar-right">
                 <button class="cyber-btn ghost" on:click={clearLog}
-                  >CLEAR VIEW</button
+                  >DELETE LOGS</button
                 >
                 <button class="cyber-btn" on:click={saveLog}
                   >SAVE LOG (DL)</button
@@ -905,7 +910,45 @@ rpcallowip=127.0.0.1
   </div>
 {/if}
 
-<style>
+<style lang="css">
+  /* Fix for Logs View Height */
+  .tool-grid.full-height {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .terminal-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+  }
+  .scanline {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0) 50%,
+      rgba(0, 0, 0, 0.1) 50%,
+      rgba(0, 0, 0, 0.1)
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0.3;
+  }
+
   @keyframes spin {
     0% {
       transform: rotate(0deg);

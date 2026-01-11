@@ -11,31 +11,63 @@ use crate::modules::commands::run_cli;
 
 #[tauri::command]
 pub fn start_node() -> Result<(), String> {
+  // EARLY DEBUG LOGGING
+  // EARLY DEBUG LOGGING - Removed for production
+
   let cfg = ensure_config()?;
   let dir = data_dir()?;
   let daemon = resolve_bin("hemp0xd");
+  
+
+
   let daemon_path = PathBuf::from(&daemon);
   if !daemon_path.exists() {
+
     return Err(format!("Daemon not found at {}", daemon));
   }
+  #[cfg(unix)]
+  let mut cmd = Command::new("sh");
+  
+  #[cfg(windows)]
   let mut cmd = Command::new(&daemon);
+
+  // Removed current_dir setting to avoid permission issues
+  /*
   if let Some(parent) = daemon_path.parent() {
     cmd.current_dir(parent);
   }
+  */
+
   #[cfg(windows)]
   {
     use std::os::windows::process::CommandExt;
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd.arg(format!("-conf={}", cfg.to_string_lossy()))
+       .arg(format!("-datadir={}", dir.to_string_lossy()));
   }
-  cmd
-    .arg(format!("-conf={}", cfg.to_string_lossy()))
-    .arg(format!("-datadir={}", dir.to_string_lossy()));
-  if !cfg!(windows) {
-    cmd.arg("-daemon");
+
+  #[cfg(unix)]
+  {
+     // Construct the full shell command string
+     // Note: We quote the paths to be safe
+     let full_cmd = format!(
+         "\"{}\" -conf=\"{}\" -datadir=\"{}\" -daemon",
+         daemon,
+         cfg.to_string_lossy(),
+         dir.to_string_lossy()
+     );
+     
+
+     
+     cmd.arg("-c").arg(full_cmd);
   }
+
   cmd
     .spawn()
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| {
+
+        e.to_string()
+    })?;
   Ok(())
 }
 
