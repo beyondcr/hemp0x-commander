@@ -59,6 +59,15 @@ shopt -s nullglob # Prevent globbing errors
 export APPIMAGE_EXTRACT_AND_RUN=1 # Bypass FUSE
 cd /app
 
+# B. Build Application
+echo "--> Building Tauri Application..."
+npm install
+npm run tauri build
+
+# C. Define APPDIR
+APPDIR="/app/src-tauri/target/release/bundle/appimage/build_appdir"
+echo "APPDIR is set to: $APPDIR"
+
 # A. Install Dependencies (Rust/Node) - Handled by Image mostly, but ensure setup
 source \$HOME/.cargo/env || true
 
